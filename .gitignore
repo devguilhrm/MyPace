@@ -1,0 +1,58 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.next/
+out/
+coverage/
+
+# Vercel
+.vercel/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Private local documentation
+DEPLOY_PRIVATE.md
+README_PRIVATE.md
+README.local.md
+
+# Private training/source notes
+periodizacao_*.md
+PREPARACAO_MEIA_MARATONA.md
+
+# Secrets and credentials
+*.pem
+*.key
+*.cert
+*.crt
+*.p12
+*.pfx
+service-role*.json
+supabase-service*.json
+secrets/
+
+# Supabase local state
+supabase/.branches/
+supabase/.temp/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS and editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# TypeScript incremental cache
+*.tsbuildinfo

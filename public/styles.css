@@ -49,6 +49,10 @@ body {
   line-height: 1.5;
 }
 
+body.modal-open {
+  overflow: hidden;
+}
+
 button,
 input,
 select,
@@ -1084,10 +1088,19 @@ input.is-invalid {
 
 .quick-modal {
   position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   width: min(480px, 100%);
   max-height: min(760px, calc(100vh - 32px));
-  overflow: auto;
+  overflow: hidden;
   border-radius: 16px;
+  padding: 0;
+}
+
+#modalContent {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
   padding: 24px;
 }
 
@@ -1807,7 +1820,7 @@ input.is-invalid {
     width: 100%;
     max-height: calc(100dvh - 8px);
     border-radius: 20px 20px 0 0;
-    padding: 10px 16px calc(18px + env(safe-area-inset-bottom));
+    padding: 0;
   }
 
   .sheet-handle {
@@ -1816,7 +1829,11 @@ input.is-invalid {
     height: 4px;
     border-radius: 2px;
     background: var(--border);
-    margin: 0 auto 16px;
+    margin: 10px auto 12px;
+  }
+
+  #modalContent {
+    padding: 0 16px calc(18px + env(safe-area-inset-bottom));
   }
 
   .modal-close {
@@ -1852,8 +1869,10 @@ input.is-invalid {
   .button.confirm {
     position: sticky;
     bottom: env(safe-area-inset-bottom);
+    z-index: 2;
     min-height: 52px;
     border-radius: 12px;
+    box-shadow: 0 -10px 18px var(--white);
   }
 
   .toast {

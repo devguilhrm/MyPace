@@ -869,12 +869,15 @@ function openRegistrationModal(weekIndex, workoutIndex, forceEdit) {
     ? registrationSummary(workout, weekIndex, workoutIndex)
     : registrationForm(workout);
   registrationModal.hidden = false;
+  document.body.classList.add('modal-open');
+  modalContent.scrollTop = 0;
   drawIcons();
 }
 
 function closeRegistrationModal() {
   modalContext = null;
   registrationModal.hidden = true;
+  document.body.classList.remove('modal-open');
   modalContent.innerHTML = '';
 }
 

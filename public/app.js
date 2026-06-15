@@ -1064,6 +1064,10 @@ function confirmRegistration(form) {
   durationField?.classList.toggle('is-invalid', !validDuration);
   paceField?.classList.toggle('is-invalid', !validPace);
   replacementField?.classList.toggle('is-invalid', !validReplacement);
+  distanceField?.toggleAttribute('aria-invalid', !validDistance);
+  durationField?.toggleAttribute('aria-invalid', !validDuration);
+  paceField?.toggleAttribute('aria-invalid', !validPace);
+  replacementField?.toggleAttribute('aria-invalid', !validReplacement);
   if (distanceError) distanceError.hidden = validDistance;
   if (durationError) durationError.hidden = validDuration;
   if (paceError) paceError.hidden = validPace;

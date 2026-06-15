@@ -210,6 +210,15 @@ textarea:focus {
   box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.12);
 }
 
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid rgba(249, 115, 22, 0.45);
+  outline-offset: 2px;
+}
+
 input.is-invalid {
   border-color: var(--danger);
   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.16);

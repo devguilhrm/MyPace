@@ -100,7 +100,7 @@
           <div class="topbar-actions">
             <span class="save-state">
               <i data-lucide="cloud"></i>
-              <span id="saveState">carregando</span>
+              <span id="saveState" aria-live="polite">carregando</span>
             </span>
           </div>
         </header>
@@ -114,7 +114,7 @@
         </section>
       </main>
 
-      <div class="toast" id="toast" hidden>
+      <div class="toast" id="toast" role="status" aria-live="polite" hidden>
         <i data-lucide="check-circle-2"></i>
         <span>Salvo</span>
       </div>

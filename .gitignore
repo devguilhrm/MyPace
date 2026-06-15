@@ -14,9 +14,10 @@ coverage/
 .env
 .env.*
 !.env.example
-scripts/ 
-scripts/create-felipe-user.mjs
-scripts/create-guilherme-user.mjs
+
+# Private local user creation scripts
+scripts/
+
 # Private local documentation
 DEPLOY_PRIVATE.md
 README_PRIVATE.md

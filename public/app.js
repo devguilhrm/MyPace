@@ -84,18 +84,18 @@ async function fetchConfig() {
 
 function setupSupabase() {
   if (!authConfig?.authEnabled || !window.supabase) {
-    authModeLabel.textContent = 'offline';
+    authModeLabel.textContent = '';
     return;
   }
 
   supabaseClient = window.supabase.createClient(authConfig.supabaseUrl, authConfig.supabaseAnonKey);
-  authModeLabel.textContent = authConfig.persistenceEnabled ? 'nuvem' : 'login';
+  authModeLabel.textContent = '';
 }
 
 async function signIn(event) {
   event.preventDefault();
   if (!supabaseClient) {
-    setAuthMessage('Supabase não configurado.');
+    setAuthMessage('Ambiente indisponível. Tente novamente em instantes.');
     return;
   }
 
@@ -113,7 +113,7 @@ async function signIn(event) {
 
     session = data.session;
     localMode = false;
-    setAuthMessage('Carregando workspace...');
+    setAuthMessage('Carregando MyPace...');
     await startApp();
     setAuthMessage('');
   } catch (error) {
@@ -154,7 +154,7 @@ async function loadPlan() {
         }
       }
     } catch {
-      saveStateEl.textContent = 'offline';
+      saveStateEl.textContent = 'local';
     }
   }
 

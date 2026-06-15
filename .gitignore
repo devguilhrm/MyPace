@@ -38,6 +38,13 @@ secrets/
 # Supabase local state
 supabase/.branches/
 supabase/.temp/
+supabase/.cache/
+supabase/.env
+supabase/.env.*
+supabase/functions/.env
+supabase/functions/.env.*
+supabase/seed.local.sql
+supabase/*.local.sql
 
 # Logs
 logs/

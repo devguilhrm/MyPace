@@ -77,6 +77,7 @@ Este repositorio esta pronto para Vercel. Configure as variaveis de ambiente no 
 ```text
 Build command: npm run build
 Framework preset: Other
+Output directory: public
 Node: 22.x
 ```
 

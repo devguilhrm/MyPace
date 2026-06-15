@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import {
-  AthleteProfile,
   TrainingPhase,
   TrainingPlan,
   TrainingWeek,
@@ -34,59 +33,40 @@ const MS_PER_DAY = 86_400_000;
 @Injectable()
 export class PlanService {
   getInitialPlan(): TrainingPlan {
-    const athlete: AthleteProfile = {
-      name: 'Guilherme',
-      objective:
-        'Meia maratona entre 2h05 e 2h10; sub-2h apenas se os checkpoints confirmarem evolucao forte.',
-      assumedRaceDate: '2026-10-31',
-      originalObjectiveText: 'Maratona de Aracaju 2026 - 21 km em 31/10/2026',
-      level:
-        'Intermediario em retorno: historico atletico forte, pausa/reducao em 2026 e retomada progressiva.',
-      availabilityDays: 4,
-      currentFiveKm:
-        'Percepcao atual: Z2 realista perto de 6:40-7:10/km, com RPE mandando mais que pace.',
-      recentHistory: [
-        '2026-06-09: 4,19 km em 27min17s, pace 6:30/km',
-        '2026-06-11: 2,76 km em 18min03s, pace 6:32/km',
-      ],
-      restrictions:
-        'Nao compensar treino perdido. Dor que altera passada exige reducao ou descanso.',
-    };
-
     return {
-      schemaVersion: '5.1.0',
-      athlete,
+      schemaVersion: '6.1.0',
       planMeta: {
         generatedAt: new Date().toISOString(),
         startDate: '2026-06-15',
         weeks: 20,
         targetRaceDistanceKm: 21.1,
-        warning: '',
+        warning: 'Plano recalibrado para meia maratona sub-2h: pace medio de prova abaixo de 5:41/km.',
         methodology: [
-          'Plano fiel ao detalhamento semana a semana do arquivo periodizacao_meia_maratona_guilherme_com_ritmos.md.',
+          'Plano adaptado a partir do arquivo Markdown(8).md colado.',
           'Frequencia maxima de 4 corridas por semana; sem sessoes de academia no app.',
+          'Objetivo principal: completar 21,1 km abaixo de 2 horas, sustentando media inferior a 5:41/km.',
           'Longao e prioridade. Se houver fadiga, corte intensidade antes de cortar descanso.',
-          'Z2 realista: 6:40-7:10/km. Acima de 7:30/km entra como regenerativo.',
+          'Z2 sub-2h: 6:15-6:45/km na fase central do ciclo, sempre validado por RPE.',
           'RPE manda mais que pace: se passar do alvo, reduza 15-30s/km.',
         ],
         references: [
-          'periodizacao_meia_maratona_guilherme_com_ritmos.md',
-          'Data-base: 15/06/2026. Prova: 31/10/2026.',
+          'Markdown(8).md colado',
+          'Data-base: 15/06/2026. Prova: 31/10/2026. Meta: sub-2h.',
         ],
         paceZones: [
-          { name: 'Regenerativo', rpe: '2-3', pace: '7:10-7:50/km' },
-          { name: 'Facil / Z2', rpe: '3-4', pace: '6:40-7:10/km' },
-          { name: 'Longao facil', rpe: '3-4', pace: '6:45-7:20/km' },
-          { name: 'Moderado', rpe: '5-6', pace: '6:05-6:30/km' },
-          { name: 'Ritmo de meia', rpe: '6-7', pace: '5:50-6:10/km' },
-          { name: 'Tempo / limiar', rpe: '7-8', pace: '5:25-5:55/km' },
-          { name: 'Intervalado', rpe: '7-8', pace: '5:00-5:40/km' },
+          { name: 'Regenerativo', rpe: '2-3', pace: '6:45-7:20/km' },
+          { name: 'Facil / Z2', rpe: '3-4', pace: '6:15-6:45/km' },
+          { name: 'Longao facil', rpe: '3-4', pace: '6:20-6:55/km' },
+          { name: 'Moderado', rpe: '5-6', pace: '5:40-6:00/km' },
+          { name: 'Ritmo de meia sub-2h', rpe: '6-7', pace: '5:35-5:45/km' },
+          { name: 'Tempo / limiar', rpe: '7-8', pace: '5:05-5:25/km' },
+          { name: 'Intervalado', rpe: '7-8', pace: '4:45-5:10/km' },
         ],
         raceScenarios: [
-          { name: 'Conservador', pace: '6:20-6:35/km', time: '2h13-2h19' },
-          { name: 'Realista', pace: '6:00-6:10/km', time: '2h06-2h10' },
-          { name: 'Boa prova', pace: '5:45-5:55/km', time: '2h01-2h05' },
-          { name: 'Sub-2h', pace: '5:35-5:41/km', time: '1h58-2h00' },
+          { name: 'Conservador', pace: '5:55-6:05/km', time: '2h05-2h08' },
+          { name: 'Controle', pace: '5:45-5:50/km', time: '2h01-2h03' },
+          { name: 'Sub-2h', pace: '5:37-5:41/km', time: '1h58-1h59' },
+          { name: 'Dia forte', pace: '5:30-5:35/km', time: '1h56-1h58' },
         ],
       },
       phases: [
@@ -313,6 +293,7 @@ export class PlanService {
     weekStart: Date,
     planned: PlannedWorkout,
   ): Workout {
+    const adapted = this.subTwoWorkout(week, planned);
     const date = new Date(weekStart.getTime() + planned.offsetDays * MS_PER_DAY);
 
     return {
@@ -321,20 +302,98 @@ export class PlanService {
       order,
       date: this.formatDate(date),
       day: this.weekday(date),
-      type: planned.type,
+      type: adapted.type,
       status: 'pendente',
-      distanceKm: planned.distanceKm,
-      distanceLabel: planned.distanceLabel ?? `${planned.distanceKm} km`,
-      paceTarget: this.paceTarget(planned),
-      zone: this.zoneFor(planned),
-      durationMinutes: this.durationMinutes(planned),
-      effort: planned.effort,
-      notes: planned.notes,
-      guidance: planned.guidance,
+      distanceKm: adapted.distanceKm,
+      distanceLabel: adapted.distanceLabel ?? `${adapted.distanceKm} km`,
+      paceTarget: this.paceTarget(adapted),
+      zone: this.zoneFor(adapted),
+      durationMinutes: this.durationMinutes(adapted),
+      effort: adapted.effort,
+      notes: adapted.notes,
+      guidance: adapted.guidance,
       execution: {
         done: false,
       },
     };
+  }
+
+  private subTwoWorkout(week: number, planned: PlannedWorkout): PlannedWorkout {
+    if (planned.distanceKm === 0) return planned;
+
+    const phase = this.subTwoPhase(week);
+    const target = this.subTwoPaceTarget(week, planned, phase);
+    const guidance = this.subTwoGuidance(planned, target);
+
+    return {
+      ...planned,
+      paceTarget: target,
+      guidance,
+    };
+  }
+
+  private subTwoPhase(week: number) {
+    if (week <= 4) return 'return';
+    if (week <= 8) return 'base';
+    if (week <= 12) return 'build';
+    if (week <= 17) return 'specific';
+    return 'taper';
+  }
+
+  private subTwoPaceTarget(week: number, planned: PlannedWorkout, phase: string): string {
+    if (planned.type === 'Prova') return '5:38-5:41/km inicial';
+    if (planned.type === 'Regenerativo') return phase === 'return' ? '6:55-7:25/km' : '6:45-7:20/km';
+    if (planned.type === 'Corrida longa') return this.subTwoLongRunPace(phase);
+    if (planned.type === 'Corrida facil (Z2)') return this.subTwoEasyPace(phase);
+    if (planned.type === 'Strides') return `${this.subTwoEasyPace(phase)} + strides soltos`;
+    if (planned.type === 'Ritmo de meia') return week >= 18 ? '2 blocos em 5:35-5:43/km' : '5:35-5:45/km';
+    if (planned.type === 'Tempo run') return week >= 15 ? '5:05-5:25/km' : '5:15-5:30/km';
+    if (planned.type === 'Intervalado') return week >= 14 ? '4:45-5:05/km' : '4:55-5:10/km';
+    if (planned.type === 'Fartlek') return '6x30s em 5:10-5:25/km / 90s leve';
+    if (planned.type === 'Subidas') return '6x20s subida forte/controlada';
+    if (planned.type === 'Teste') return week >= 12 ? 'Teste 5 km em 4:55-5:15/km' : '5:55-6:15/km';
+    if (planned.type === 'Progressivo') return '6:15-6:25 -> 5:50-6:00 -> 5:35-5:45/km';
+    return planned.paceTarget;
+  }
+
+  private subTwoEasyPace(phase: string): string {
+    if (phase === 'return') return '6:35-7:05/km';
+    if (phase === 'base') return '6:25-6:55/km';
+    if (phase === 'build') return '6:15-6:45/km';
+    if (phase === 'specific') return '6:10-6:40/km';
+    return '6:25-6:55/km';
+  }
+
+  private subTwoLongRunPace(phase: string): string {
+    if (phase === 'return') return '6:45-7:15/km';
+    if (phase === 'base') return '6:35-7:05/km';
+    if (phase === 'build') return '6:25-6:55/km';
+    if (phase === 'specific') return '6:20-6:50/km';
+    return '6:35-7:05/km';
+  }
+
+  private subTwoGuidance(planned: PlannedWorkout, target: string): string {
+    if (planned.type === 'Prova') {
+      return 'Meta sub-2h: largar controlado perto de 5:40/km, estabilizar abaixo de 5:41/km e acelerar apenas se sobrar depois do km 16.';
+    }
+
+    if (planned.type === 'Ritmo de meia') {
+      return `Ensaiar ritmo de prova sub-2h em ${target}. Forte controlado, sem transformar em teste maximo.`;
+    }
+
+    if (planned.type === 'Tempo run' || planned.type === 'Intervalado' || planned.type === 'Progressivo') {
+      return `${planned.guidance} Referencia sub-2h: ${target}. Controle a tecnica antes de buscar pace.`;
+    }
+
+    if (planned.type === 'Corrida longa') {
+      return `${planned.guidance} Longao para sustentar resistencia sub-2h; terminar inteiro vale mais que acelerar.`;
+    }
+
+    if (planned.type === 'Corrida facil (Z2)') {
+      return `${planned.guidance} Facil de verdade: este treino constrói base para correr abaixo de 2h.`;
+    }
+
+    return planned.guidance;
   }
 
   private zoneFor(planned: PlannedWorkout): Workout['zone'] {

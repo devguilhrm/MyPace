@@ -7,7 +7,8 @@ O foco do projeto e direto: entrar, ver o treino de hoje, registrar execucao em 
 ## O Que O App Faz
 
 - Login privado com Supabase Auth.
-- Consulta da periodizacao gerada a partir do plano `periodizacao_meia_maratona_guilherme_com_ritmos.md`.
+- Consulta da periodizacao adaptada do arquivo `Markdown(8).md colado`, com objetivo de 21,1 km abaixo de 2h.
+- Tela `Preparação` permite visualizar todos os treinos do ciclo completo.
 - Tela `Hoje` detecta automaticamente o treino pela data atual.
 - Tela `Semana` lista os treinos da semana com status visual.
 - Tela `Evolução` mostra progresso, cards tecnicos e grafico usando somente treinos finalizados.

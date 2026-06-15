@@ -22,20 +22,14 @@ export type WorkoutType =
   | 'Descanso completo'
   | 'Prova';
 
-export interface AthleteProfile {
-  name: string;
-  objective: string;
-  assumedRaceDate: string;
-  originalObjectiveText: string;
-  level: string;
-  availabilityDays: number;
-  currentFiveKm: string;
-  recentHistory: string[];
-  restrictions: string;
-}
-
 export interface WorkoutExecution {
   done: boolean;
+  km_real?: number;
+  pace_real?: string;
+  rpe?: number;
+  comentario?: string;
+  data_execucao?: string;
+  atualizado_em?: string;
   distanceKm?: number;
   pace?: string;
   feeling?: number;
@@ -78,7 +72,6 @@ export interface TrainingWeek {
 
 export interface TrainingPlan {
   schemaVersion: string;
-  athlete: AthleteProfile;
   planMeta: {
     generatedAt: string;
     startDate: string;

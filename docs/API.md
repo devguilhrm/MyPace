@@ -49,16 +49,13 @@ Notas:
 
 ## GET /plan
 
-Retorna a periodizacao inicial fiel ao arquivo `periodizacao_meia_maratona_guilherme_com_ritmos.md`.
+Retorna a periodizacao inicial adaptada do arquivo `Markdown(8).md colado`, recalibrada para 21,1 km abaixo de 2h.
 
 Resposta resumida:
 
 ```json
 {
-  "schemaVersion": "5.1.0",
-  "athlete": {
-    "name": "Guilherme"
-  },
+  "schemaVersion": "6.1.0",
   "planMeta": {
     "startDate": "2026-06-15",
     "weeks": 20,
@@ -75,9 +72,9 @@ Resposta resumida:
           "status": "pendente",
           "type": "Corrida facil (Z2)",
           "zone": "Z2",
-          "durationMinutes": 21,
+          "durationMinutes": 20,
           "distanceKm": 3,
-          "paceTarget": "6:55-7:20/km"
+          "paceTarget": "6:35-7:05/km"
         }
       ]
     }
@@ -100,7 +97,7 @@ Resposta quando existe plano salvo:
 ```json
 {
   "plan": {
-    "schemaVersion": "5.1.0"
+    "schemaVersion": "6.1.0"
   },
   "updated_at": "2026-06-14T23:31:45.123Z"
 }
@@ -131,7 +128,7 @@ Body:
 
 ```json
 {
-  "schemaVersion": "5.1.0",
+  "schemaVersion": "6.1.0",
   "weeks": []
 }
 ```

@@ -1805,9 +1805,9 @@ input.is-invalid {
 
   .quick-modal {
     width: 100%;
-    max-height: 90vh;
+    max-height: calc(100dvh - 8px);
     border-radius: 20px 20px 0 0;
-    padding: 10px 20px calc(20px + env(safe-area-inset-bottom));
+    padding: 10px 16px calc(18px + env(safe-area-inset-bottom));
   }
 
   .sheet-handle {
@@ -1822,6 +1822,31 @@ input.is-invalid {
   .modal-close {
     top: 12px;
     right: 16px;
+  }
+
+  .quick-register {
+    gap: 14px;
+  }
+
+  .quick-register h2 {
+    margin-inline: 44px;
+    font-size: 16px;
+  }
+
+  .modal-subtitle {
+    margin-top: -10px;
+    font-size: 12px;
+  }
+
+  .quick-register input,
+  .quick-register select,
+  .quick-register textarea {
+    min-height: 48px;
+    font-size: 16px;
+  }
+
+  .training-fields {
+    gap: 12px;
   }
 
   .button.confirm {

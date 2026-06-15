@@ -374,13 +374,20 @@ function handleInput(event) {
   if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement)) return;
 
   if (target.name === 'pace') {
+    const previousAutoPace = target.dataset.autoPace ?? '';
     const cursorAtEnd = target.selectionStart === target.value.length;
     target.value = maskPace(target.value);
-    if (cursorAtEnd) target.setSelectionRange(target.value.length, target.value.length);
+    if (cursorAtEnd) placeCursorAtEnd(target);
+    target.dataset.manualPace = String(Boolean(target.value.trim() && target.value !== previousAutoPace));
   }
 
   if (target.name === 'duration') {
     target.value = maskDuration(target.value);
+    if (event.type === 'input') placeCursorAtEnd(target);
+  }
+
+  if (target.name === 'distance') {
+    target.value = maskDistance(target.value);
   }
 
   if (['distance', 'duration'].includes(target.name)) {
@@ -894,7 +901,7 @@ function registrationForm(workout) {
         <label>
           Distancia real
           <div class="unit-input">
-            <input name="distance" type="number" min="0" step="0.1" value="${escapeAttr(execution.km_real ?? workout.distanceKm)}" />
+            <input name="distance" type="text" inputmode="decimal" autocomplete="off" value="${escapeAttr(formatDistanceInput(execution.km_real ?? workout.distanceKm))}" />
             <b>km</b>
           </div>
           <span class="field-error" id="distanceError" hidden>Informe uma distancia maior que zero.</span>
@@ -986,7 +993,7 @@ function confirmRegistration(form) {
   const workout = state.weeks[modalContext.weekIndex].workouts[modalContext.workoutIndex];
   const data = new FormData(form);
   const status = String(data.get('executionStatus') ?? 'finalizado');
-  const distance = Number(data.get('distance'));
+  const distance = parseDistanceInput(data.get('distance'));
   const duration = normalizeDurationInput(String(data.get('duration') ?? ''));
   const pace = normalizePaceInput(String(data.get('pace') ?? ''));
   const rpe = Number(data.get('rpe') ?? 5);
@@ -1683,8 +1690,33 @@ function normalizeDurationInput(value) {
   return maskDuration(value).trim();
 }
 
+function formatDistanceInput(value) {
+  const distance = Number(value);
+  if (!Number.isFinite(distance)) return '';
+  return String(distance).replace('.', ',');
+}
+
+function parseDistanceInput(value) {
+  const normalized = String(value ?? '').replace(',', '.').trim();
+  const distance = Number(normalized);
+  return Number.isFinite(distance) ? distance : NaN;
+}
+
+function maskDistance(value) {
+  const raw = String(value ?? '');
+  const separator = raw.includes(',') ? ',' : raw.includes('.') ? '.' : '';
+  const normalized = raw.replace(',', '.');
+  const [integer = '', decimal = ''] = normalized.split('.');
+  const integerDigits = integer.replace(/\D/g, '').slice(0, 3);
+  const decimalDigits = decimal.replace(/\D/g, '').slice(0, 2);
+  if (separator) return `${integerDigits}${separator}${decimalDigits}`;
+  return integerDigits;
+}
+
 function maskPace(value) {
-  const digits = String(value).replace(/\D/g, '').slice(0, 4);
+  const raw = String(value ?? '').trim();
+  if (raw.includes(':')) return raw.replace(/[^\d:]/g, '').replace(/:{2,}/g, ':').slice(0, 5);
+  const digits = raw.replace(/\D/g, '').slice(0, 4);
   if (digits.length <= 2) return digits;
   return `${Number(digits.slice(0, -2))}:${digits.slice(-2)}`;
 }
@@ -1709,11 +1741,25 @@ function parseDurationToSeconds(value) {
 
 function updateAutoPace(form) {
   if (!form) return;
-  const distance = Number(form.querySelector('[name="distance"]')?.value);
+  const distance = parseDistanceInput(form.querySelector('[name="distance"]')?.value);
   const duration = parseDurationToSeconds(form.querySelector('[name="duration"]')?.value);
   const paceField = form.querySelector('[name="pace"]');
   if (!paceField || !Number.isFinite(distance) || distance <= 0 || !duration) return;
-  paceField.value = formatPace(Math.round(duration / distance));
+  const nextPace = formatPace(Math.round(duration / distance));
+  if (paceField.dataset.manualPace === 'true' && paceField.value.trim() && paceField.value !== paceField.dataset.autoPace) return;
+  paceField.value = nextPace;
+  paceField.dataset.autoPace = nextPace;
+  paceField.dataset.manualPace = 'false';
+}
+
+function placeCursorAtEnd(input) {
+  window.requestAnimationFrame(() => {
+    try {
+      input.setSelectionRange(input.value.length, input.value.length);
+    } catch {
+      // Some mobile keyboards do not expose selection for every input state.
+    }
+  });
 }
 
 function parsePaceToSeconds(value) {

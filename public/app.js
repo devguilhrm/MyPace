@@ -214,7 +214,7 @@ async function loadSavedPlan() {
         }
       }
     } catch {
-      saveStateEl.textContent = 'local';
+      setSaveState('local', 'local');
     }
   }
 
@@ -1917,7 +1917,7 @@ function saveRunnerSettings(formData) {
 function persist(options = {}) {
   localStorage.setItem(storageKey(), JSON.stringify(state));
   const mode = session && !localMode && authConfig?.persistenceEnabled ? 'nuvem' : 'local';
-  saveStateEl.textContent = `salvo ${mode}`;
+  setSaveState(`salvo ${mode}`, mode === 'nuvem' ? 'saved' : 'local');
   if (!options.skipRemote) {
     scheduleRemoteSync();
     if (!options.silent) showToast('Treino salvo ✓');
@@ -1927,7 +1927,7 @@ function persist(options = {}) {
 function scheduleRemoteSync() {
   window.clearTimeout(syncTimer);
   if (!session || localMode || !authConfig?.persistenceEnabled) return;
-  saveStateEl.textContent = 'sincronizando';
+  setSaveState('sincronizando', 'syncing');
   syncTimer = window.setTimeout(syncRemote, 700);
 }
 
@@ -1939,10 +1939,16 @@ async function syncRemote() {
       body: JSON.stringify(state),
     });
     if (!response.ok) throw new Error('Falha ao salvar');
-    saveStateEl.textContent = 'salvo nuvem';
+    setSaveState('salvo nuvem', 'saved');
   } catch {
-    saveStateEl.textContent = 'salvo local';
+    setSaveState('salvo local', 'local');
+    showToast('Sem conexao: salvo localmente', 'warn');
   }
+}
+
+function setSaveState(message, status = 'saved') {
+  saveStateEl.textContent = message;
+  saveStateEl.parentElement?.setAttribute('data-status', status);
 }
 
 function exportJson() {
@@ -1979,8 +1985,9 @@ function exportJson() {
   URL.revokeObjectURL(url);
 }
 
-function showToast(message) {
+function showToast(message, tone = 'success') {
   toastEl.querySelector('span').textContent = message;
+  toastEl.dataset.tone = tone;
   toastEl.hidden = false;
   drawIcons();
   window.clearTimeout(toastTimer);

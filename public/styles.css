@@ -449,8 +449,26 @@ input.is-invalid {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  border-radius: 999px;
+  padding: 5px 8px;
   color: var(--slate);
   font-size: 12px;
+  font-weight: 800;
+}
+
+.save-state[data-status="saved"] {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.save-state[data-status="syncing"] {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.save-state[data-status="local"] {
+  background: #e2e8f0;
+  color: #334155;
 }
 
 .save-state svg {
@@ -1630,6 +1648,11 @@ input.is-invalid {
     transform 180ms ease;
 }
 
+.toast[data-tone="warn"] {
+  background: #fef3c7;
+  color: #92400e;
+}
+
 .toast svg {
   width: 18px;
   height: 18px;
@@ -1729,10 +1752,27 @@ input.is-invalid {
 
   .topbar {
     padding: max(18px, env(safe-area-inset-top)) 16px 16px;
+    justify-content: space-between;
   }
 
   .topbar h1 {
     font-size: 19px;
+  }
+
+  .topbar > div:first-child {
+    width: auto;
+    min-width: 0;
+  }
+
+  .topbar-actions {
+    display: flex;
+    flex-shrink: 0;
+  }
+
+  .save-state {
+    max-width: 104px;
+    font-size: 10px;
+    white-space: nowrap;
   }
 
   .runner-layout,

@@ -50,6 +50,7 @@ supabase/functions/.env
 supabase/functions/.env.*
 supabase/seed.local.sql
 supabase/*.local.sql
+supabase/schema.sql
 
 
 # Logs

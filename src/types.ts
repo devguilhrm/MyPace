@@ -58,6 +58,32 @@ export interface CoachWorkoutInput {
   guidance?: string;
 }
 
+export type CoachAthleteStatus = 'active' | 'invited' | 'archived';
+
+export interface CoachAthleteSummary {
+  athleteId: string;
+  email: string;
+  username: string;
+  displayName: string;
+  status: CoachAthleteStatus;
+  linkedAt?: string;
+}
+
+export interface CoachInviteInput {
+  email: string;
+  displayName?: string;
+}
+
+export interface CoachInvite {
+  id: string;
+  coachId: string;
+  email: string;
+  token: string;
+  status: 'pending' | 'accepted' | 'expired';
+  createdAt: string;
+  expiresAt: string;
+}
+
 export interface WorkoutExecution {
   done: boolean;
   status?: WorkoutStatus;

@@ -1,5 +1,14 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { AppUserIdentity, TrainingPlan, UserRole } from './types';
+import { randomUUID } from 'node:crypto';
+import {
+  AppUserIdentity,
+  CoachAthleteStatus,
+  CoachAthleteSummary,
+  CoachInvite,
+  CoachInviteInput,
+  TrainingPlan,
+  UserRole,
+} from './types';
 
 interface SupabaseUserResponse {
   id?: string;
@@ -23,6 +32,23 @@ export interface StoredPlanRow {
 
 interface SupabaseAdminUsersResponse {
   users?: SupabaseUserResponse[];
+}
+
+interface CoachAthleteRow {
+  coach_id: string;
+  athlete_id: string;
+  status?: CoachAthleteStatus;
+  created_at?: string;
+}
+
+interface CoachInviteRow {
+  id: string;
+  coach_id: string;
+  email: string;
+  token: string;
+  status: CoachInvite['status'];
+  created_at: string;
+  expires_at: string;
 }
 
 @Injectable()
@@ -132,6 +158,125 @@ export class SupabaseService {
     });
 
     if (!user?.id) return null;
+    return {
+      id: user.id,
+      email: user.email ?? '',
+      username: user.user_metadata?.username ?? '',
+      displayName: user.user_metadata?.display_name ?? '',
+      role: this.resolveRole(user),
+    };
+  }
+
+  async listCoachAthletes(coach: AppUserIdentity): Promise<CoachAthleteSummary[]> {
+    if (!this.isPersistenceReady()) {
+      return [];
+    }
+
+    const response = await fetch(
+      `${this.url}/rest/v1/coach_athletes?coach_id=eq.${encodeURIComponent(coach.id)}&select=athlete_id,status,created_at`,
+      { headers: this.serviceHeaders() },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Supabase coach athletes read failed: ${response.status}`);
+    }
+
+    const rows = (await response.json()) as CoachAthleteRow[];
+    const athletes = await Promise.all(rows.map((row) => this.findUserById(row.athlete_id)));
+
+    return rows.map((row, index) => ({
+      athleteId: row.athlete_id,
+      email: athletes[index]?.email ?? '',
+      username: athletes[index]?.username ?? '',
+      displayName: athletes[index]?.displayName ?? '',
+      status: row.status ?? 'active',
+      linkedAt: row.created_at,
+    }));
+  }
+
+  async createCoachInvite(coach: AppUserIdentity, input: CoachInviteInput): Promise<CoachInvite> {
+    if (!this.isPersistenceReady()) {
+      throw new Error('Persistencia indisponivel para criar convite.');
+    }
+
+    const email = input.email.trim().toLowerCase();
+    if (!email || !email.includes('@')) {
+      throw new Error('Email do atleta invalido.');
+    }
+
+    const token = randomUUID();
+    const createdAt = new Date();
+    const expiresAt = new Date(createdAt.getTime() + 1000 * 60 * 60 * 24 * 7);
+
+    const response = await fetch(`${this.url}/rest/v1/coach_invites`, {
+      method: 'POST',
+      headers: {
+        ...this.serviceHeaders(),
+        'content-type': 'application/json',
+        prefer: 'return=representation',
+      },
+      body: JSON.stringify({
+        coach_id: coach.id,
+        email,
+        token,
+        status: 'pending',
+        created_at: createdAt.toISOString(),
+        expires_at: expiresAt.toISOString(),
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Supabase coach invite create failed: ${response.status}`);
+    }
+
+    const rows = (await response.json()) as CoachInviteRow[];
+    const row = rows[0];
+    return {
+      id: row.id,
+      coachId: row.coach_id,
+      email: row.email,
+      token: row.token,
+      status: row.status,
+      createdAt: row.created_at,
+      expiresAt: row.expires_at,
+    };
+  }
+
+  async assertCoachCanManageAthlete(coach: AppUserIdentity, athleteId: string) {
+    if (!this.isPersistenceReady()) {
+      throw new Error('Persistencia indisponivel para validar atleta.');
+    }
+
+    const response = await fetch(
+      `${this.url}/rest/v1/coach_athletes?coach_id=eq.${encodeURIComponent(coach.id)}&athlete_id=eq.${encodeURIComponent(athleteId)}&status=eq.active&select=athlete_id&limit=1`,
+      { headers: this.serviceHeaders() },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Supabase coach athlete validation failed: ${response.status}`);
+    }
+
+    const rows = (await response.json()) as Array<{ athlete_id: string }>;
+    if (!rows.length) {
+      throw new Error('Atleta nao esta vinculado a este coach.');
+    }
+  }
+
+  private async findUserById(userId: string): Promise<AppUserIdentity | null> {
+    if (!this.isPersistenceReady()) {
+      return null;
+    }
+
+    const response = await fetch(`${this.url}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
+      headers: this.serviceHeaders(),
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const user = (await response.json()) as SupabaseUserResponse;
+    if (!user.id) return null;
     return {
       id: user.id,
       email: user.email ?? '',

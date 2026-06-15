@@ -1,7 +1,7 @@
 import { BadRequestException, Body, Controller, ForbiddenException, Get, Headers, Post, Put } from '@nestjs/common';
 import { PlanService } from './plan.service';
 import { SupabaseService } from './supabase.service';
-import { CoachWorkoutInput, TrainingPlan } from './types';
+import { CoachInviteInput, CoachWorkoutInput, TrainingPlan } from './types';
 
 @Controller('api')
 export class PlanController {
@@ -48,22 +48,44 @@ export class PlanController {
     return this.supabaseService.saveUserPlan(authorization, plan);
   }
 
+  @Get('coach/athletes')
+  async listCoachAthletes(@Headers('authorization') authorization?: string) {
+    const coach = await this.requireCoach(authorization);
+    return {
+      athletes: await this.supabaseService.listCoachAthletes(coach),
+    };
+  }
+
+  @Post('coach/invites')
+  async createCoachInvite(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() input: CoachInviteInput,
+  ) {
+    const coach = await this.requireCoach(authorization);
+    try {
+      const invite = await this.supabaseService.createCoachInvite(coach, input);
+      return {
+        invite,
+        inviteUrl: `/login?invite=${encodeURIComponent(invite.token)}`,
+      };
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : 'Nao foi possivel criar convite.');
+    }
+  }
+
   @Post('coach/workouts')
   async addCoachWorkout(
     @Headers('authorization') authorization: string | undefined,
     @Body() input: CoachWorkoutInput,
   ) {
-    const coach = await this.supabaseService.requireUser(authorization);
-    if (coach.role !== 'coach') {
-      throw new ForbiddenException('Apenas coaches podem criar treinos para atletas.');
-    }
-
+    const coach = await this.requireCoach(authorization);
     const athlete = await this.supabaseService.findUserByHandle(input.athlete);
     if (!athlete) {
       throw new BadRequestException('Atleta nao encontrado. Use username ou email cadastrado.');
     }
 
     try {
+      await this.supabaseService.assertCoachCanManageAthlete(coach, athlete.id);
       const stored = await this.supabaseService.getUserPlanByUserId(athlete.id);
       const basePlan = stored?.plan?.weeks?.length
         ? stored.plan
@@ -82,5 +104,13 @@ export class PlanController {
     } catch (error) {
       throw new BadRequestException(error instanceof Error ? error.message : 'Nao foi possivel criar treino.');
     }
+  }
+
+  private async requireCoach(authorization: string | undefined) {
+    const coach = await this.supabaseService.requireUser(authorization);
+    if (coach.role !== 'coach') {
+      throw new ForbiddenException('Apenas coaches podem acessar recursos de coach.');
+    }
+    return coach;
   }
 }

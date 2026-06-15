@@ -14,7 +14,9 @@ coverage/
 .env
 .env.*
 !.env.example
-
+scripts/ 
+scripts/create-felipe-user.mjs
+scripts/create-guilherme-user.mjs
 # Private local documentation
 DEPLOY_PRIVATE.md
 README_PRIVATE.md
@@ -48,6 +50,7 @@ supabase/functions/.env
 supabase/functions/.env.*
 supabase/seed.local.sql
 supabase/*.local.sql
+
 
 # Logs
 logs/

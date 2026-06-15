@@ -460,7 +460,9 @@ function renderHeader() {
 
 function syncNavigation() {
   document.querySelectorAll('[data-view]').forEach((item) => {
-    item.classList.toggle('is-active', item.dataset.view === activeView);
+    const isActive = item.dataset.view === activeView;
+    item.classList.toggle('is-active', isActive);
+    item.toggleAttribute('aria-current', isActive);
   });
 }
 

@@ -158,8 +158,7 @@ h3 {
 }
 
 .login-copy,
-.inline-error,
-.auth-mode {
+.inline-error {
   color: var(--slate);
   font-size: 0.9rem;
 }
@@ -168,12 +167,6 @@ h3 {
   min-height: 22px;
   margin: 0;
   text-align: center;
-}
-
-.auth-mode {
-  position: absolute;
-  top: 20px;
-  right: 20px;
 }
 
 label {
@@ -371,10 +364,14 @@ textarea:focus {
   padding: 24px;
 }
 
-.coach-grid {
+.personal-layout {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
+}
+
+.personal-layout {
+  max-width: 1120px;
+  margin: 0 auto;
 }
 
 .athlete-card,
@@ -527,6 +524,13 @@ textarea:focus {
   gap: 16px;
 }
 
+.hero-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
 .midnight-card {
   background: #0f172a;
   color: #ffffff;
@@ -593,6 +597,116 @@ textarea:focus {
 .workout-layout {
   grid-template-columns: 280px minmax(0, 1fr);
   align-items: start;
+}
+
+.side-metrics {
+  grid-template-columns: 1fr;
+  margin: 0;
+}
+
+.personal-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.workout-list {
+  display: grid;
+  gap: 12px;
+}
+
+.plan-card {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr) minmax(116px, auto) auto;
+  gap: 14px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--white);
+  padding: 14px;
+}
+
+.plan-card.detail {
+  grid-template-columns: 86px minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.plan-card.is-done {
+  background: var(--cloud);
+}
+
+.plan-date {
+  display: grid;
+  gap: 2px;
+  justify-items: start;
+}
+
+.plan-date strong,
+.plan-meta strong {
+  color: var(--midnight);
+  font-weight: 800;
+}
+
+.plan-date span,
+.plan-meta span,
+.guidance {
+  color: var(--slate);
+  font-size: 0.86rem;
+}
+
+.plan-card h3 {
+  margin-bottom: 3px;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.plan-card p {
+  margin: 0;
+  color: var(--slate);
+}
+
+.plan-meta {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  text-align: right;
+}
+
+.plan-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.card-header.compact {
+  margin-bottom: 12px;
+}
+
+.done-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 104px;
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--cloud);
+  color: var(--midnight);
+  padding: 6px 10px;
+  text-transform: none;
+}
+
+.done-chip input {
+  width: 16px;
+  min-height: 16px;
+}
+
+.note-list {
+  display: grid;
+  gap: 10px;
+}
+
+.note-list p {
+  margin: 0;
+  border-left: 3px solid var(--lava);
+  padding-left: 12px;
+  color: var(--midnight);
 }
 
 .week-picker-card {
@@ -797,7 +911,7 @@ textarea:focus {
 }
 
 @media (max-width: 1180px) {
-  .coach-grid,
+  .personal-metrics,
   .skeleton-grid,
   .zones-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -833,7 +947,7 @@ textarea:focus {
 
   .main-nav {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
   }
 
@@ -860,7 +974,7 @@ textarea:focus {
     padding: 14px;
   }
 
-  .coach-grid,
+  .personal-metrics,
   .skeleton-grid,
   .zones-grid,
   .feature-card .metric-row,
@@ -883,5 +997,21 @@ textarea:focus {
   .empty-state {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .hero-card,
+  .plan-card,
+  .plan-card.detail {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .plan-meta {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .done-chip {
+    width: 100%;
   }
 }

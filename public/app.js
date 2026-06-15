@@ -12,7 +12,6 @@ let authConfig = null;
 let supabaseClient = null;
 let session = null;
 let localMode = false;
-let viewMode = 'coach';
 
 const authView = document.querySelector('#authView');
 const appView = document.querySelector('#appView');
@@ -20,7 +19,6 @@ const loginForm = document.querySelector('#loginForm');
 const loginEmail = document.querySelector('#loginEmail');
 const loginPassword = document.querySelector('#loginPassword');
 const authMessage = document.querySelector('#authMessage');
-const authModeLabel = document.querySelector('#authModeLabel');
 const mainContent = document.querySelector('#mainContent');
 const saveStateEl = document.querySelector('#saveState');
 const themeToggleBtn = document.querySelector('#themeToggleBtn');
@@ -30,7 +28,6 @@ const viewEyebrow = document.querySelector('#viewEyebrow');
 const currentWeekLabel = document.querySelector('#currentWeekLabel');
 const selectedAthleteName = document.querySelector('#selectedAthleteName');
 const selectedAvatar = document.querySelector('#selectedAvatar');
-const modeToggle = document.querySelector('#modeToggle');
 const toastEl = document.querySelector('#toast');
 
 applyTheme();
@@ -62,10 +59,6 @@ function bindEvents() {
   loginForm.addEventListener('submit', signIn);
   themeToggleBtn.addEventListener('click', toggleTheme);
   logoutBtn.addEventListener('click', logout);
-  modeToggle.addEventListener('change', () => {
-    viewMode = modeToggle.checked ? 'athlete' : 'coach';
-    render();
-  });
 
   document.body.addEventListener('click', handleClick);
   document.body.addEventListener('input', handleInput);
@@ -84,12 +77,10 @@ async function fetchConfig() {
 
 function setupSupabase() {
   if (!authConfig?.authEnabled || !window.supabase) {
-    authModeLabel.textContent = '';
     return;
   }
 
   supabaseClient = window.supabase.createClient(authConfig.supabaseUrl, authConfig.supabaseAnonKey);
-  authModeLabel.textContent = '';
 }
 
 async function signIn(event) {
@@ -207,6 +198,10 @@ function handleInput(event) {
   workout.execution ??= { done: false };
   workout.execution[target.dataset.execution] = readInputValue(target);
   persist();
+  if (target.type === 'checkbox') {
+    render();
+    return;
+  }
   renderHeader();
 }
 
@@ -222,9 +217,8 @@ function render() {
     dashboard: renderDashboard,
     athlete: renderAthleteProfile,
     workout: renderWorkoutBuilder,
-    report: renderReport,
   };
-  mainContent.innerHTML = renderers[activeView]();
+  mainContent.innerHTML = (renderers[activeView] ?? renderDashboard)();
   drawIcons();
 }
 
@@ -232,10 +226,9 @@ function renderHeader() {
   const athlete = state?.athlete?.name ?? 'Guilherme';
   const week = currentWeek();
   const labels = {
-    dashboard: ['Dashboard do coach', viewMode === 'coach' ? 'Atletas acompanhados' : 'Minha semana'],
-    athlete: ['Perfil do atleta', athlete],
-    workout: ['Montagem de treino', `Semana ${selectedWeek}`],
-    report: ['Relatório de evolução', 'Pace e consistência'],
+    dashboard: ['Meu plano', 'Treinos da semana'],
+    workout: ['Plano completo', `Semana ${selectedWeek}`],
+    athlete: ['Ritmos e regras', 'Referência do ciclo'],
   };
   viewEyebrow.textContent = labels[activeView][0];
   viewTitle.textContent = labels[activeView][1];
@@ -245,73 +238,73 @@ function renderHeader() {
 }
 
 function renderDashboard() {
-  const athletes = coachAthletes();
-  return `
-    <section class="coach-grid">
-      ${athletes.map((athlete) => athleteCard(athlete)).join('')}
-    </section>
-  `;
-}
-
-function athleteCard(athlete) {
-  return `
-    <article class="athlete-card">
-      <header class="card-header">
-        <div class="avatar">${escapeHtml(athlete.initials)}</div>
-        <div>
-          <h2>${escapeHtml(athlete.name)}</h2>
-          <p>${escapeHtml(athlete.nextWorkout)}</p>
-        </div>
-        ${statusBadge(athlete.status)}
-      </header>
-
-      <div class="metric-row">
-        ${compactMetric('Pace semanal', athlete.weeklyPace, true)}
-        ${compactMetric('Carga', athlete.loadLabel)}
-        ${compactMetric('Volume', `${athlete.volume} km`)}
-      </div>
-
-      <div>
-        <div class="progress-label">
-          <span>Progresso semanal</span>
-          <strong>${athlete.progress}%</strong>
-        </div>
-        <div class="progress-track"><span style="width:${athlete.progress}%"></span></div>
-      </div>
-
-      <div class="quick-actions">
-        <button class="button primary" data-view="workout" data-week="${selectedWeek}" type="button"><i data-lucide="plus"></i><span>Adicionar treino</span></button>
-        <button class="button" data-view="report" type="button"><i data-lucide="file-line-chart"></i><span>Ver relatório</span></button>
-        <button class="button" type="button"><i data-lucide="message-circle"></i><span>Mensagem</span></button>
-      </div>
-    </article>
-  `;
-}
-
-function renderAthleteProfile() {
   const week = currentWeek();
+  const next = nextWorkout();
   const completed = completedWorkouts();
+  const remaining = remainingWorkouts(week);
   return `
-    <section class="profile-layout">
-      <article class="feature-card midnight-card">
-        <div class="profile-hero">
-          <div class="avatar large">G</div>
-          <div>
-            <p class="eyebrow lava-text">Atleta selecionado</p>
-            <h2>${escapeHtml(state.athlete.name)}</h2>
-            <p>${escapeHtml(state.athlete.objective)}</p>
-          </div>
+    <section class="personal-layout">
+      <article class="feature-card midnight-card hero-card">
+        <div>
+          <p class="eyebrow lava-text">Próximo treino</p>
+          <h2>${next ? escapeHtml(next.type) : 'Ciclo concluído'}</h2>
+          <p>${next ? `${formatDate(next.date)} • ${escapeHtml(next.day)} • ${escapeHtml(next.distanceLabel ?? `${next.distanceKm} km`)}` : 'Todos os treinos planejados foram concluídos.'}</p>
         </div>
-        <div class="metric-row">
-          ${compactMetric('Semana atual', `S${week.week}`)}
-          ${compactMetric('Próximo treino', nextWorkout()?.type ?? 'Completo')}
-          ${compactMetric('Conclusão', `${completed.percent}%`)}
-          ${compactMetric('Meta', '2h05')}
+        <strong class="pace-number">${next ? escapeHtml(paceFrom(next.paceTarget)) : '21,1 km'}</strong>
+      </article>
+
+      <div class="metric-row personal-metrics">
+        ${compactMetric('Semana', `S${week.week}`)}
+        ${compactMetric('Volume planejado', week.volumeLabel ?? `${week.targetVolumeKm} km`)}
+        ${compactMetric('Treinos restantes', String(remaining.length))}
+        ${compactMetric('Ciclo concluído', `${completed.percent}%`)}
+      </div>
+
+      <article class="feature-card">
+        <div class="card-header">
+          <div>
+            <p class="eyebrow">Semana atual</p>
+            <h2>${escapeHtml(week.focus)}</h2>
+            <p>${escapeHtml(week.phase)} • Longão ${escapeHtml(week.longRunLabel ?? '-')}</p>
+          </div>
+          ${phaseBadge(week.phase)}
+        </div>
+        <div class="workout-list">
+          ${week.workouts.map((workout) => workoutSummaryCard(workout, state.weeks.indexOf(week))).join('')}
         </div>
       </article>
 
       <article class="feature-card">
-        <h2>Zonas e ritmos</h2>
+        <h2>Comentários do plano</h2>
+        <div class="note-list">
+          ${state.planMeta.methodology.slice(0, 4).map((item) => `<p>${escapeHtml(item)}</p>`).join('')}
+        </div>
+      </article>
+    </section>
+  `;
+}
+
+function renderAthleteProfile() {
+  return `
+    <section class="personal-layout">
+      <article class="feature-card">
+        <div class="card-header">
+          <div>
+            <p class="eyebrow">Objetivo</p>
+            <h2>${escapeHtml(state.athlete.objective)}</h2>
+            <p>${escapeHtml(state.athlete.originalObjectiveText)}</p>
+          </div>
+        </div>
+        <div class="metric-row personal-metrics">
+          ${compactMetric('Disponibilidade', `${state.athlete.availabilityDays} dias`)}
+          ${compactMetric('Distância-alvo', `${state.planMeta.targetRaceDistanceKm} km`)}
+          ${compactMetric('Início', formatDate(state.planMeta.startDate))}
+          ${compactMetric('Prova', formatDate(state.athlete.assumedRaceDate))}
+        </div>
+      </article>
+
+      <article class="feature-card">
+        <h2>Zonas práticas</h2>
         <div class="zones-grid">
           ${(state.planMeta.paceZones ?? []).map((zone) => `
             <div class="zone-item">
@@ -324,14 +317,23 @@ function renderAthleteProfile() {
       </article>
 
       <article class="feature-card">
-        <h2>Semanas do ciclo</h2>
-        <div class="week-strip">
-          ${state.weeks.map((item) => `
-            <button class="week-pill ${String(item.week) === selectedWeek ? 'is-active' : ''}" data-week="${item.week}" type="button">
-              <span>S${item.week}</span>
-              <strong>${escapeHtml(item.volumeLabel ?? `${item.targetVolumeKm} km`)}</strong>
-            </button>
+        <h2>Cenários de prova</h2>
+        <div class="zones-grid">
+          ${(state.planMeta.raceScenarios ?? []).map((scenario) => `
+            <div class="zone-item">
+              <strong>${escapeHtml(scenario.name)}</strong>
+              <span>${escapeHtml(scenario.pace)}</span>
+              <small>${escapeHtml(scenario.time)}</small>
+            </div>
           `).join('')}
+        </div>
+      </article>
+
+      <article class="feature-card">
+        <h2>Regras importantes</h2>
+        <div class="note-list">
+          <p>${escapeHtml(state.athlete.restrictions)}</p>
+          ${state.planMeta.methodology.map((item) => `<p>${escapeHtml(item)}</p>`).join('')}
         </div>
       </article>
     </section>
@@ -341,200 +343,115 @@ function renderAthleteProfile() {
 function renderWorkoutBuilder() {
   const week = state.weeks.find((item) => String(item.week) === selectedWeek) ?? currentWeek();
   const weekIndex = state.weeks.indexOf(week);
-  const selectedWorkout = week.workouts.find((workout) => workout.distanceKm > 0) ?? week.workouts[0];
-  const blocks = workoutBlocks(selectedWorkout);
+  const completedInWeek = week.workouts.filter((workout) => workout.execution?.done).length;
 
   return `
     <section class="workout-layout">
       <aside class="week-picker-card">
-        <h2>Semana de treino</h2>
+        <h2>Semana</h2>
         <select class="week-select" onchange="window.setWeek(this.value)">
           ${state.weeks.map((item) => `<option value="${item.week}" ${item.week === week.week ? 'selected' : ''}>Semana ${item.week} • ${escapeHtml(item.keyWorkout ?? item.focus)}</option>`).join('')}
         </select>
         <div class="load-bar"><span style="width:${loadPercent(week)}%"></span></div>
-        <p>${escapeHtml(week.focus)} • ${escapeHtml(week.volumeLabel ?? `${week.targetVolumeKm} km`)}</p>
+        <p>${escapeHtml(week.focus)}</p>
+        <div class="metric-row side-metrics">
+          ${compactMetric('Volume', week.volumeLabel ?? `${week.targetVolumeKm} km`)}
+          ${compactMetric('Longão', week.longRunLabel ?? '-')}
+          ${compactMetric('Feitos', `${completedInWeek}/${week.workouts.length}`)}
+        </div>
       </aside>
 
       <article class="feature-card">
         <div class="card-header">
           <div>
-            <p class="eyebrow">Timeline do treino</p>
-            <h2>${escapeHtml(selectedWorkout.type)}</h2>
-            <p>${escapeHtml(selectedWorkout.guidance ?? selectedWorkout.notes)}</p>
+            <p class="eyebrow">Treinos planejados</p>
+            <h2>${escapeHtml(week.phase)} • Semana ${week.week}</h2>
+            <p>${escapeHtml(week.focus)}</p>
           </div>
-          ${intensityPill(selectedWorkout)}
+          ${phaseBadge(week.phase)}
         </div>
-
-        <div class="timeline">
-          ${blocks.map((block, index) => workoutBlock(block, index)).join('')}
-        </div>
-      </article>
-
-      <article class="feature-card">
-        <h2>Registro da execução</h2>
-        <div class="execution-list">
-          ${week.workouts.map((workout, workoutIndex) => executionCard(workout, weekIndex, workoutIndex)).join('')}
+        <div class="workout-list">
+          ${week.workouts.map((workout) => workoutDetailCard(workout, weekIndex)).join('')}
         </div>
       </article>
     </section>
   `;
 }
 
-function workoutBlock(block, index) {
+function workoutSummaryCard(workout, weekIndex) {
+  const isRest = Number(workout.distanceKm || 0) === 0;
   return `
-    <article class="timeline-block">
-      <span class="block-index">${index + 1}</span>
+    <article class="plan-card ${workout.execution?.done ? 'is-done' : ''}">
+      <div class="plan-date">
+        <strong>${formatDate(workout.date)}</strong>
+        <span>${escapeHtml(workout.day)}</span>
+      </div>
       <div>
-        <strong contenteditable="true">${escapeHtml(block.title)}</strong>
-        <p contenteditable="true">${escapeHtml(block.detail)}</p>
+        <h3>${escapeHtml(workout.type)}</h3>
+        <p>${escapeHtml(workout.guidance ?? workout.notes)}</p>
       </div>
-      <div class="block-data">
-        <span contenteditable="true">${escapeHtml(block.duration)}</span>
-        <b contenteditable="true">${escapeHtml(block.pace)}</b>
-        <small contenteditable="true">${escapeHtml(block.zone)}</small>
+      <div class="plan-meta">
+        <strong>${escapeHtml(workout.distanceLabel ?? `${workout.distanceKm} km`)}</strong>
+        <span>${isRest ? 'recuperação' : escapeHtml(paceFrom(workout.paceTarget))}</span>
       </div>
+      ${doneToggle(workout, weekIndex)}
     </article>
   `;
 }
 
-function executionCard(workout, weekIndex, workoutIndex) {
-  const execution = workout.execution ?? {};
+function workoutDetailCard(workout, weekIndex) {
   return `
-    <article class="execution-card">
-      <label class="done-check">
-        <input data-week="${weekIndex}" data-workout="${workoutIndex}" data-execution="done" type="checkbox" ${execution.done ? 'checked' : ''} />
-        <span>${escapeHtml(workout.type)}</span>
-      </label>
-      <div class="inline-fields">
-        <input data-week="${weekIndex}" data-workout="${workoutIndex}" data-execution="distanceKm" type="number" min="0" step="0.1" value="${execution.distanceKm ?? ''}" placeholder="${workout.distanceKm || 0} km" />
-        <input data-week="${weekIndex}" data-workout="${workoutIndex}" data-execution="pace" type="text" value="${escapeAttr(execution.pace ?? '')}" placeholder="mm:ss/km" />
-        <input data-week="${weekIndex}" data-workout="${workoutIndex}" data-execution="feeling" type="number" min="1" max="10" value="${execution.feeling ?? ''}" placeholder="RPE" />
+    <article class="plan-card detail ${workout.execution?.done ? 'is-done' : ''}">
+      <div class="plan-date">
+        <strong>${formatDate(workout.date)}</strong>
+        <span>${escapeHtml(workout.day)}</span>
       </div>
-      <textarea data-week="${weekIndex}" data-workout="${workoutIndex}" data-execution="notes" rows="2" placeholder="Observações">${escapeHtml(execution.notes ?? '')}</textarea>
-    </article>
-  `;
-}
-
-function renderReport() {
-  const points = paceTrend();
-  return `
-    <section class="report-layout">
-      <article class="feature-card">
-        <div class="card-header">
+      <div>
+        <div class="card-header compact">
           <div>
-            <p class="eyebrow">Evolução de pace</p>
-            <h2>Últimas semanas</h2>
+            <h3>${escapeHtml(workout.type)}</h3>
+            <p>${escapeHtml(workout.notes)}</p>
           </div>
-          <strong class="pace-number">${points.at(-1)?.pace ?? '6:05'}/km</strong>
+          ${intensityPill(workout)}
         </div>
-        <div class="pace-chart" aria-label="Gráfico simples de evolução de pace">
-          ${points.map((point, index) => `<span style="height:${point.height}%" title="S${index + 1} ${point.pace}/km"></span>`).join('')}
-          <i></i>
+        <div class="metric-row plan-metrics">
+          ${compactMetric('Distância', workout.distanceLabel ?? `${workout.distanceKm} km`)}
+          ${compactMetric('Ritmo-alvo', workout.paceTarget, true)}
+          ${compactMetric('Esforço', `RPE ${workout.effort}`)}
         </div>
-        <div class="chart-legend">
-          <span><b class="lava-dot"></b>Pace</span>
-          <span><b class="green-dot"></b>Meta</span>
-        </div>
-      </article>
-
-      <article class="feature-card">
-        <h2>Resumo técnico</h2>
-        <div class="metric-row">
-          ${compactMetric('Pace médio', averagePace(), true)}
-          ${compactMetric('Volume total', `${round(totalExecuted() || totalPlanned())} km`)}
-          ${compactMetric('PR provável', '2h06')}
-          ${compactMetric('Carga', riskSummary().label)}
-        </div>
-      </article>
-
-      <article class="empty-state">
-        <div class="empty-illustration"></div>
-        <div>
-          <h2>Relatório exportável</h2>
-          <p>Quando houver mais execuções registradas, o relatório ganha comparativos por bloco e por fase.</p>
-          <button class="button primary" type="button" onclick="window.exportJson()"><i data-lucide="download"></i><span>Exportar JSON</span></button>
-        </div>
-      </article>
-    </section>
+        <p class="guidance">${escapeHtml(workout.guidance ?? '')}</p>
+      </div>
+      ${doneToggle(workout, weekIndex)}
+    </article>
   `;
+}
+
+function doneToggle(workout, weekIndex) {
+  const workoutIndex = state.weeks[weekIndex].workouts.findIndex((item) => item.id === workout.id);
+  return `
+    <label class="done-chip">
+      <input data-week="${weekIndex}" data-workout="${workoutIndex}" data-execution="done" type="checkbox" ${workout.execution?.done ? 'checked' : ''} />
+      <span>${workout.execution?.done ? 'Feito' : 'Pendente'}</span>
+    </label>
+  `;
+}
+
+function phaseBadge(phase) {
+  return `<span class="status-badge green">${escapeHtml(phase)}</span>`;
+}
+
+function remainingWorkouts(week) {
+  return week.workouts.filter((workout) => !workout.execution?.done && workout.distanceKm > 0);
 }
 
 function compactMetric(label, value, mono = false) {
   return `<div class="mini-metric"><span>${escapeHtml(label)}</span><strong class="${mono ? 'mono' : ''}">${escapeHtml(value)}</strong></div>`;
 }
 
-function statusBadge(status) {
-  const labels = { green: 'No prazo', lava: 'Atrasado', midnight: 'Lesionado' };
-  return `<span class="status-badge ${status}">${labels[status]}</span>`;
-}
-
 function intensityPill(workout) {
   const effort = Number(workout.effort || 0);
   const label = workout.type === 'Prova' ? 'Race' : effort >= 7 ? 'Hard' : effort >= 5 ? 'Moderate' : 'Easy';
   return `<span class="intensity-pill ${label.toLowerCase()}">${label}</span>`;
-}
-
-function coachAthletes() {
-  const completed = completedWorkouts();
-  const next = nextWorkout();
-  const executed = totalExecuted();
-  return [
-    {
-      initials: 'G',
-      name: state.athlete.name,
-      nextWorkout: next ? `${next.type} • ${next.distanceLabel}` : 'Ciclo completo',
-      weeklyPace: averagePace(),
-      loadLabel: riskSummary().label,
-      volume: round(executed || currentWeek().targetVolumeKm),
-      progress: completed.percent,
-      status: 'green',
-    },
-    { initials: 'M', name: 'Marina Costa', nextWorkout: 'Tempo run • 8 km', weeklyPace: '5:48/km', loadLabel: 'média', volume: 28, progress: 72, status: 'green' },
-    { initials: 'R', name: 'Rafael Lima', nextWorkout: 'Longão • 16 km', weeklyPace: '6:12/km', loadLabel: 'alta', volume: 36, progress: 64, status: 'lava' },
-    { initials: 'B', name: 'Bianca Alves', nextWorkout: 'Easy • 5 km', weeklyPace: '6:40/km', loadLabel: 'baixa', volume: 18, progress: 86, status: 'green' },
-    { initials: 'T', name: 'Thiago Reis', nextWorkout: 'Recuperação', weeklyPace: '7:05/km', loadLabel: 'baixa', volume: 12, progress: 42, status: 'midnight' },
-    { initials: 'L', name: 'Luiza Rocha', nextWorkout: 'Intervalado • 6x800m', weeklyPace: '5:22/km', loadLabel: 'média', volume: 31, progress: 78, status: 'green' },
-  ];
-}
-
-function workoutBlocks(workout) {
-  if (workout.type === 'Intervalado') {
-    return [
-      { title: 'Aquecimento', detail: 'Rodagem leve + mobilidade dinâmica', duration: '12 min', pace: '6:50/km', zone: 'Z2' },
-      { title: workout.paceTarget.split(' em ')[0], detail: 'Repetições técnicas com controle de forma', duration: '24 min', pace: paceFrom(workout.paceTarget), zone: 'Z4' },
-      { title: 'Recuperação', detail: '2 min trote entre repetições', duration: '10 min', pace: '7:20/km', zone: 'Z1' },
-      { title: 'Desaquecimento', detail: 'Soltar respiração e cadência', duration: '8 min', pace: '7:10/km', zone: 'Z1' },
-    ];
-  }
-  if (workout.type === 'Ritmo de meia' || workout.type === 'Tempo run') {
-    return [
-      { title: 'Aquecimento', detail: 'Entrada progressiva sem pressa', duration: '12 min', pace: '6:45/km', zone: 'Z2' },
-      { title: workout.notes, detail: workout.guidance ?? 'Bloco controlado', duration: '30 min', pace: paceFrom(workout.paceTarget), zone: 'Z3/Z4' },
-      { title: 'Recuperação', detail: 'Trote leve entre blocos', duration: '6 min', pace: '7:10/km', zone: 'Z1' },
-      { title: 'Desaquecimento', detail: 'Fechar melhor do que começou', duration: '8 min', pace: '7:20/km', zone: 'Z1' },
-    ];
-  }
-  return [
-    { title: 'Preparação', detail: 'Respiração, cadência e saída controlada', duration: '5 min', pace: 'leve', zone: 'Z1' },
-    { title: workout.type, detail: workout.notes, duration: estimateDuration(workout), pace: paceFrom(workout.paceTarget), zone: workout.effort >= 7 ? 'Z4' : 'Z2' },
-    { title: 'Fechamento', detail: workout.guidance ?? 'Registrar sensação ao final', duration: '5 min', pace: 'solto', zone: 'Z1' },
-  ];
-}
-
-function weekRisk(week, weekIndex) {
-  const planned = Number(week.targetVolumeKm || 0);
-  const executed = executedWeekVolume(week);
-  const highRpe = week.workouts.some((workout) => Number(workout.execution?.feeling || 0) >= 8);
-  const previous = state.weeks[weekIndex - 1];
-  if (executed > planned * 1.15 && executed > 0) return { level: 'lava', label: 'alta', note: 'Carga acima do planejado. Reduzir impacto nas próximas 48h.' };
-  if (highRpe) return { level: 'lava', label: 'média', note: 'RPE alto registrado. Manter próximos treinos fáceis.' };
-  if (previous && planned > Number(previous.targetVolumeKm || 0) * 1.12 && week.phase !== 'tapering') return { level: 'lava', label: 'média', note: 'Semana com aumento de volume. Priorizar Z2 e sono.' };
-  return { level: 'green', label: 'baixa', note: 'Carga coerente com a fase atual.' };
-}
-
-function riskSummary() {
-  const week = currentWeek();
-  return weekRisk(week, state.weeks.indexOf(week));
 }
 
 function currentWeek() {
@@ -551,38 +468,9 @@ function completedWorkouts() {
   return { done: done.length, total: all.length, percent: all.length ? Math.round((done.length / all.length) * 100) : 0 };
 }
 
-function executedWeekVolume(week) {
-  return week.workouts.reduce((sum, workout) => workout.execution?.done ? sum + Number(workout.execution.distanceKm ?? workout.distanceKm ?? 0) : sum, 0);
-}
-
-function totalExecuted() {
-  return state.weeks.reduce((sum, week) => sum + executedWeekVolume(week), 0);
-}
-
-function totalPlanned() {
-  return state.weeks.reduce((sum, week) => sum + Number(week.targetVolumeKm || 0), 0);
-}
-
-function averagePace() {
-  const paces = state.weeks.flatMap((week) => week.workouts).map((workout) => workout.execution?.pace).filter(Boolean);
-  return paces.at(-1) ?? '6:05/km';
-}
-
-function paceTrend() {
-  return ['6:52', '6:44', '6:38', '6:31', '6:22', '6:15', '6:09', '6:05'].map((pace, index) => ({
-    pace,
-    height: 34 + index * 7,
-  }));
-}
-
 function paceFrom(value) {
   const match = String(value).match(/\d:\d{2}(?:-\d:\d{2})?/);
   return match ? `${match[0]}/km` : value;
-}
-
-function estimateDuration(workout) {
-  const km = Number(workout.distanceKm || 0);
-  return km ? `${Math.max(12, Math.round(km * 7))} min` : '15 min';
 }
 
 function loadPercent(week) {
@@ -701,10 +589,6 @@ function applyTheme() {
   document.documentElement.dataset.theme = settings.theme;
 }
 
-function round(value) {
-  return Number(value || 0).toFixed(1).replace('.0', '');
-}
-
 function formatDate(value) {
   const date = parseLocalDate(value);
   if (!date) return value;
@@ -728,10 +612,6 @@ function escapeHtml(value) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
-}
-
-function escapeAttr(value) {
-  return escapeHtml(value).replaceAll('\n', ' ');
 }
 
 function drawIcons() {

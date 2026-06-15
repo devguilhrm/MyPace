@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>MyPace | Coach Dashboard</title>
+    <title>MyPace | Plano pessoal</title>
     <link rel="stylesheet" href="/styles.css" />
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
@@ -35,7 +35,6 @@
         </button>
 
         <p class="inline-error" id="authMessage"></p>
-        <span class="auth-mode" id="authModeLabel" hidden></span>
       </form>
     </section>
 
@@ -45,26 +44,22 @@
           <div class="brand-mark">MP</div>
           <div>
             <strong>MyPace</strong>
-            <span>Coach Console</span>
+            <span>Plano pessoal</span>
           </div>
         </div>
 
         <nav class="main-nav" aria-label="Navegação principal">
           <button class="nav-item is-active" data-view="dashboard" type="button">
-            <i data-lucide="layout-dashboard"></i>
-            <span>Dashboard</span>
-          </button>
-          <button class="nav-item" data-view="athlete" type="button">
-            <i data-lucide="user-round"></i>
-            <span>Atleta</span>
+            <i data-lucide="calendar-check"></i>
+            <span>Hoje</span>
           </button>
           <button class="nav-item" data-view="workout" type="button">
-            <i data-lucide="timer"></i>
-            <span>Treino</span>
+            <i data-lucide="list-checks"></i>
+            <span>Plano</span>
           </button>
-          <button class="nav-item" data-view="report" type="button">
-            <i data-lucide="line-chart"></i>
-            <span>Relatório</span>
+          <button class="nav-item" data-view="athlete" type="button">
+            <i data-lucide="gauge"></i>
+            <span>Ritmos</span>
           </button>
         </nav>
 
@@ -83,8 +78,8 @@
       <main class="app-main">
         <header class="topbar">
           <div>
-            <p class="eyebrow" id="viewEyebrow">Dashboard do coach</p>
-            <h1 id="viewTitle">Atletas acompanhados</h1>
+            <p class="eyebrow" id="viewEyebrow">Meu plano</p>
+            <h1 id="viewTitle">Treinos da semana</h1>
           </div>
 
           <div class="topbar-actions">
@@ -95,11 +90,6 @@
                 <span id="currentWeekLabel">Semana atual</span>
               </div>
             </div>
-            <label class="mode-toggle">
-              <span>Coach</span>
-              <input id="modeToggle" type="checkbox" />
-              <span>Atleta</span>
-            </label>
             <span class="save-state" id="saveState">carregando</span>
           </div>
         </header>

@@ -1,40 +1,36 @@
 # MyPace
 
-MyPace e um app web para coaches de corrida organizarem treinos, acompanharem pace e mostrarem evolucao de atletas com uma experiencia simples, moderna e profissional.
+MyPace e um MVP pessoal para consultar a periodizacao de corrida do Guilherme em uma interface simples, privada e pronta para deploy.
 
-O produto foi pensado para quem treina corredores de forma recorrente: menos planilhas soltas, mais clareza sobre semana atual, carga, proximo treino, execucao e progresso.
+O foco do projeto e direto: entrar, ver o proximo treino, consultar a semana atual, navegar pelas 20 semanas do ciclo e revisar ritmos/regras importantes da preparacao para meia maratona.
 
-## Proposta
+## O Que O App Faz
 
-- Dashboard do coach com visao rapida dos atletas acompanhados.
-- Perfil do atleta com zonas, progresso semanal e indicadores de carga.
-- Montagem de treino em timeline, com blocos de serie, pace alvo e intensidade.
-- Relatorio de evolucao focado em pace, consistencia e aderencia.
-- Login com Supabase Auth e persistencia do plano por usuario.
-- Deploy simples na Vercel com frontend estatico e API serverless.
+- Login privado com Supabase Auth.
+- Consulta da periodizacao gerada a partir do plano `periodizacao_meia_maratona_guilherme_com_ritmos.md`.
+- Tela `Hoje` com proximo treino, semana atual e comentarios importantes.
+- Tela `Plano` com todas as semanas, treinos, paces, distancias, RPE e orientacoes.
+- Tela `Ritmos` com zonas de pace, cenarios de prova e regras do ciclo.
+- Persistencia simples para marcar treinos como feitos.
 
-## Visao Do Produto
+## Fluxo
 
 ```mermaid
 flowchart LR
-  Coach[Coach de corrida] --> Login[Login MyPace]
-  Atleta[Atleta] --> Login
-  Login --> Dashboard[Dashboard do coach]
-  Dashboard --> Perfil[Perfil do atleta]
-  Dashboard --> Treino[Montagem de treino]
-  Treino --> Plano[Plano semanal]
-  Perfil --> Relatorio[Relatorio de evolucao]
-  Plano --> Supabase[(Supabase Auth + Postgres)]
-  Relatorio --> Supabase
-  Dashboard --> API[NestJS API]
-  API --> Supabase
+  Login[Login privado] --> Hoje[Hoje: proximo treino]
+  Hoje --> Plano[Plano: 20 semanas]
+  Plano --> Treino[Treino planejado]
+  Hoje --> Ritmos[Ritmos e regras]
+  Treino --> Supabase[(Supabase)]
+  Ritmos --> API[NestJS API]
+  API --> PlanoBase[Periodizacao no backend]
 ```
 
 ## Stack
 
 - Frontend: HTML, CSS e JavaScript puro em `public/`.
 - Backend: NestJS + Express em `src/` e `api/`.
-- Banco e auth: Supabase Auth + Postgres.
+- Auth e persistencia: Supabase.
 - Deploy: Vercel.
 - Linguagem: TypeScript.
 
@@ -49,12 +45,6 @@ Acesse:
 
 ```text
 http://localhost:3000
-```
-
-Se precisar usar outra porta:
-
-```bash
-PORT=3001 npm run dev
 ```
 
 ## Variaveis De Ambiente
@@ -76,7 +66,7 @@ SEED_USER_EMAIL=
 SEED_USER_PASSWORD=
 ```
 
-Arquivos `.env`, guias privados e chaves ficam fora do Git por seguranca.
+Nunca versionar `.env`, chaves privadas ou guias pessoais de deploy.
 
 ## Scripts
 
@@ -90,19 +80,13 @@ npm run seed:user
 
 ## API
 
-A documentacao dos endpoints esta em [docs/API.md](docs/API.md).
-
-## Design
-
-As diretrizes de interface, tokens e telas principais estao em [docs/DESIGN.md](docs/DESIGN.md).
+Documentacao dos endpoints: [docs/API.md](docs/API.md).
 
 ## Supabase
 
-O schema principal fica em [supabase/schema.sql](supabase/schema.sql). Estados locais, arquivos temporarios, seeds locais e variaveis privadas do Supabase sao ignorados no Git.
+Schema principal: [supabase/schema.sql](supabase/schema.sql).
 
 ## Deploy Na Vercel
-
-Configuracao recomendada:
 
 ```text
 Framework preset: Other
@@ -112,4 +96,4 @@ Install command: npm install
 Node.js: 22.x
 ```
 
-Depois, cadastre as variaveis de ambiente no painel da Vercel e rode o deploy conectado ao GitHub.
+Configure as variaveis de ambiente na Vercel antes de publicar.

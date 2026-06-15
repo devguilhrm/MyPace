@@ -2012,6 +2012,40 @@ input.is-invalid {
     transform: translateX(50%);
   }
 
+  .pace-chart {
+    grid-template-columns: 40px minmax(420px, 1fr);
+    height: 220px;
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .chart-bars {
+    min-width: 420px;
+    gap: 10px;
+  }
+
+  .bar-item {
+    min-width: 48px;
+    flex: 0 0 48px;
+  }
+
+  .bar-value {
+    font-size: 10px;
+  }
+
+  .mini-chart {
+    min-height: 132px;
+    gap: 10px;
+    padding: 12px;
+    scroll-snap-type: x proximity;
+  }
+
+  .mini-bar-item {
+    min-width: 46px;
+    flex: 0 0 46px;
+    scroll-snap-align: start;
+  }
+
   .export-card,
   .empty-state,
   .history-row {

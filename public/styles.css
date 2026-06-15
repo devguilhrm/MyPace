@@ -1949,7 +1949,7 @@ input.is-invalid {
 
   .quick-modal {
     width: 100%;
-    max-height: calc(100dvh - 8px);
+    max-height: calc(var(--app-height, 100dvh) - 8px);
     border-radius: 20px 20px 0 0;
     padding: 0;
   }

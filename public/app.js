@@ -102,9 +102,13 @@ function bindEvents() {
   document.body.addEventListener('click', handleClick);
   document.body.addEventListener('input', handleInput);
   document.body.addEventListener('change', handleInput);
+  document.body.addEventListener('focusin', handleFocusIn);
   document.body.addEventListener('focusout', handleFocusOut);
   document.body.addEventListener('submit', handleSubmit);
   window.addEventListener('popstate', handleRouteChange);
+  window.addEventListener('resize', syncViewportSize);
+  window.visualViewport?.addEventListener('resize', syncViewportSize);
+  syncViewportSize();
 }
 
 async function fetchConfig() {
@@ -427,6 +431,21 @@ function handleFocusOut(event) {
     if (Number.isFinite(distance)) target.value = formatDistanceInput(distance);
     updateAutoPace(target.closest('form'));
   }
+}
+
+function handleFocusIn(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement)) return;
+  if (!target.closest('#registrationModal')) return;
+
+  window.setTimeout(() => {
+    target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, 180);
+}
+
+function syncViewportSize() {
+  const height = window.visualViewport?.height ?? window.innerHeight;
+  document.documentElement.style.setProperty('--app-height', `${Math.round(height)}px`);
 }
 
 function render() {

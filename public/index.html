@@ -5,129 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>MyPace | Plano pessoal</title>
     <link rel="stylesheet" href="/styles.css" />
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" defer></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" defer></script>
     <script src="/app.js" defer></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer onload="window.drawMyPaceIcons && window.drawMyPaceIcons()"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
   </head>
   <body>
-    <section class="entry-view" id="entryView" hidden>
-      <div class="entry-card">
-        <div class="entry-mark">MP</div>
-        <h1>MyPace</h1>
-        <p>Seu treino de hoje, no seu ritmo.</p>
-        <button class="entry-button" data-action="enter-app" type="button">Acessar meus treinos</button>
-      </div>
-    </section>
-
-    <section class="login-view" id="loginView" hidden>
-      <form class="login-card" id="loginForm">
-        <div class="login-brand-stack">
-          <div class="login-mark">MP</div>
-          <h1>Entrar no MyPace</h1>
-          <p class="login-copy">Acesse sua periodização e registros salvos.</p>
-        </div>
-
-        <label>
-          Usuário ou email
-          <input id="loginEmail" type="text" autocomplete="username" value="guilherme" required />
-        </label>
-
-        <label>
-          Senha
-          <input id="loginPassword" type="password" autocomplete="current-password" minlength="6" required />
-        </label>
-
-        <button class="button primary" id="signInBtn" type="submit">
-          <span>Entrar</span>
-        </button>
-
-        <p class="inline-error" id="authMessage"></p>
-      </form>
-    </section>
-
-    <div class="app-view" id="appView" hidden>
-      <aside class="app-sidebar">
-        <div class="sidebar-brand">
-          <div class="brand-mark">MP</div>
-          <div>
-            <strong>MyPace</strong>
-            <span>Plano pessoal</span>
-          </div>
-        </div>
-
-        <nav class="main-nav" aria-label="Navegação principal">
-          <button class="nav-item is-active" data-view="today" type="button">
-            <i data-lucide="sun"></i>
-            <span>Hoje</span>
-          </button>
-          <button class="nav-item" data-view="week" type="button">
-            <i data-lucide="calendar-days"></i>
-            <span>Semana</span>
-          </button>
-          <button class="nav-item" data-view="preparation" type="button">
-            <i data-lucide="map"></i>
-            <span>Plano</span>
-          </button>
-          <button class="nav-item" data-view="report" type="button">
-            <i data-lucide="bar-chart-3"></i>
-            <span>Evolução</span>
-          </button>
-          <button class="nav-item" data-view="settings" type="button">
-            <i data-lucide="settings"></i>
-            <span>Config</span>
-          </button>
-        </nav>
-
-        <div class="sidebar-footer">
-          <button class="button ghost" id="themeToggleBtn" type="button">
-            <i data-lucide="moon"></i>
-            <span>Tema</span>
-          </button>
-          <button class="button ghost" id="logoutBtn" type="button">
-            <i data-lucide="log-out"></i>
-            <span>Sair</span>
-          </button>
-        </div>
-      </aside>
-
-      <main class="app-main">
-        <header class="topbar">
-          <div>
-            <p class="eyebrow" id="viewEyebrow">Meu plano</p>
-            <h1 id="viewTitle">Treino do dia</h1>
-          </div>
-
-          <div class="topbar-actions">
-            <span class="save-state">
-              <i data-lucide="cloud"></i>
-              <span id="saveState" aria-live="polite">carregando</span>
-            </span>
-          </div>
-        </header>
-
-        <section class="content-shell" id="mainContent">
-          <div class="skeleton-grid">
-            <div class="skeleton-card"></div>
-            <div class="skeleton-card"></div>
-            <div class="skeleton-card"></div>
-          </div>
-        </section>
-      </main>
-
-      <div class="toast" id="toast" role="status" aria-live="polite" hidden>
-        <i data-lucide="check-circle-2"></i>
-        <span>Salvo</span>
-      </div>
-
-      <div class="modal-backdrop" id="registrationModal" hidden>
-        <section class="quick-modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-          <div class="sheet-handle" aria-hidden="true"></div>
-          <button class="icon-button modal-close" id="modalCloseBtn" type="button" aria-label="Fechar">
-            <i data-lucide="x"></i>
-          </button>
-          <div id="modalContent"></div>
-        </section>
-      </div>
-    </div>
+    <div id="root"></div>
   </body>
 </html>

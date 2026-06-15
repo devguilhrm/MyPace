@@ -3,6 +3,8 @@ const SETTINGS_KEY = 'mypace:settings:v3';
 const PLAN_VERSION = '6.2.0';
 const LOGIN_PATH = '/login';
 
+renderReactShell();
+
 let state = null;
 let settings = loadSettings();
 let activeView = 'today';
@@ -36,6 +38,117 @@ const VIEW_PATHS = {
   report: '/evolucao',
   settings: '/config',
 };
+
+function renderReactShell() {
+  const root = document.querySelector('#root');
+  if (!root || !window.React || !window.ReactDOM) return;
+
+  const h = window.React.createElement;
+  const icon = (name) => h('i', { 'data-lucide': name });
+  const navItems = [
+    ['today', 'sun', 'Hoje'],
+    ['week', 'calendar-days', 'Semana'],
+    ['preparation', 'map', 'Plano'],
+    ['report', 'bar-chart-3', 'Evolução'],
+    ['settings', 'settings', 'Config'],
+  ];
+
+  function AppShell() {
+    return h(window.React.Fragment, null,
+      h('section', { className: 'entry-view', id: 'entryView', hidden: true },
+        h('div', { className: 'entry-card' },
+          h('div', { className: 'entry-mark' }, 'MP'),
+          h('h1', null, 'MyPace'),
+          h('p', null, 'Seu treino de hoje, no seu ritmo.'),
+          h('button', { className: 'entry-button', 'data-action': 'enter-app', type: 'button' }, 'Acessar meus treinos'),
+        ),
+      ),
+      h('section', { className: 'login-view', id: 'loginView', hidden: true },
+        h('form', { className: 'login-card', id: 'loginForm' },
+          h('div', { className: 'login-brand-stack' },
+            h('div', { className: 'login-mark' }, 'MP'),
+            h('h1', null, 'Entrar no MyPace'),
+            h('p', { className: 'login-copy' }, 'Acesse sua periodização e registros salvos.'),
+          ),
+          h('label', null,
+            'Usuário ou email',
+            h('input', { id: 'loginEmail', type: 'text', autoComplete: 'username', defaultValue: 'guilherme', required: true }),
+          ),
+          h('label', null,
+            'Senha',
+            h('input', { id: 'loginPassword', type: 'password', autoComplete: 'current-password', minLength: 6, required: true }),
+          ),
+          h('button', { className: 'button primary', id: 'signInBtn', type: 'submit' }, h('span', null, 'Entrar')),
+          h('p', { className: 'inline-error', id: 'authMessage' }),
+        ),
+      ),
+      h('div', { className: 'app-view', id: 'appView', hidden: true },
+        h('aside', { className: 'app-sidebar' },
+          h('div', { className: 'sidebar-brand' },
+            h('div', { className: 'brand-mark' }, 'MP'),
+            h('div', null,
+              h('strong', null, 'MyPace'),
+              h('span', null, 'Plano pessoal'),
+            ),
+          ),
+          h('nav', { className: 'main-nav', 'aria-label': 'Navegação principal' },
+            navItems.map(([view, iconName, label]) =>
+              h('button', {
+                key: view,
+                className: `nav-item${view === 'today' ? ' is-active' : ''}`,
+                'data-view': view,
+                type: 'button',
+              }, icon(iconName), h('span', null, label)),
+            ),
+          ),
+          h('div', { className: 'sidebar-footer' },
+            h('button', { className: 'button ghost', id: 'themeToggleBtn', type: 'button' }, icon('moon'), h('span', null, 'Tema')),
+            h('button', { className: 'button ghost', id: 'logoutBtn', type: 'button' }, icon('log-out'), h('span', null, 'Sair')),
+          ),
+        ),
+        h('main', { className: 'app-main' },
+          h('header', { className: 'topbar' },
+            h('div', null,
+              h('p', { className: 'eyebrow', id: 'viewEyebrow' }, 'Meu plano'),
+              h('h1', { id: 'viewTitle' }, 'Treino do dia'),
+            ),
+            h('div', { className: 'topbar-actions' },
+              h('span', { className: 'save-state' },
+                icon('cloud'),
+                h('span', { id: 'saveState', 'aria-live': 'polite' }, 'carregando'),
+              ),
+            ),
+          ),
+          h('section', { className: 'content-shell', id: 'mainContent' },
+            h('div', { className: 'skeleton-grid' },
+              h('div', { className: 'skeleton-card' }),
+              h('div', { className: 'skeleton-card' }),
+              h('div', { className: 'skeleton-card' }),
+            ),
+          ),
+        ),
+        h('div', { className: 'toast', id: 'toast', role: 'status', 'aria-live': 'polite', hidden: true },
+          icon('check-circle-2'),
+          h('span', null, 'Salvo'),
+        ),
+        h('div', { className: 'modal-backdrop', id: 'registrationModal', hidden: true },
+          h('section', { className: 'quick-modal', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'modalTitle' },
+            h('div', { className: 'sheet-handle', 'aria-hidden': 'true' }),
+            h('button', { className: 'icon-button modal-close', id: 'modalCloseBtn', type: 'button', 'aria-label': 'Fechar' }, icon('x')),
+            h('div', { id: 'modalContent' }),
+          ),
+        ),
+      ),
+    );
+  }
+
+  const reactRoot = window.ReactDOM.createRoot(root);
+  if (window.ReactDOM.flushSync) {
+    window.ReactDOM.flushSync(() => reactRoot.render(h(AppShell)));
+  } else {
+    reactRoot.render(h(AppShell));
+  }
+}
 
 const entryView = document.querySelector('#entryView');
 const loginView = document.querySelector('#loginView');

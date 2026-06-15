@@ -34,7 +34,7 @@ const MS_PER_DAY = 86_400_000;
 export class PlanService {
   getInitialPlan(): TrainingPlan {
     return {
-      schemaVersion: '6.1.0',
+      schemaVersion: '6.2.0',
       planMeta: {
         generatedAt: new Date().toISOString(),
         startDate: '2026-06-15',

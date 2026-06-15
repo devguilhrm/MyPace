@@ -55,7 +55,7 @@ Resposta resumida:
 
 ```json
 {
-  "schemaVersion": "6.1.0",
+  "schemaVersion": "6.2.0",
   "planMeta": {
     "startDate": "2026-06-15",
     "weeks": 20,
@@ -97,7 +97,7 @@ Resposta quando existe plano salvo:
 ```json
 {
   "plan": {
-    "schemaVersion": "6.1.0"
+    "schemaVersion": "6.2.0"
   },
   "updated_at": "2026-06-14T23:31:45.123Z"
 }
@@ -128,7 +128,7 @@ Body:
 
 ```json
 {
-  "schemaVersion": "6.1.0",
+  "schemaVersion": "6.2.0",
   "weeks": []
 }
 ```

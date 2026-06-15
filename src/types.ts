@@ -24,20 +24,28 @@ export type WorkoutType =
 
 export interface WorkoutExecution {
   done: boolean;
+  status?: WorkoutStatus;
   km_real?: number;
+  tempo_real?: string;
   pace_real?: string;
   rpe?: number;
+  dor?: 'nenhuma' | 'leve' | 'moderada' | 'forte';
+  sono?: 'bom' | 'regular' | 'ruim';
+  clima?: string;
+  substituicao?: string;
   comentario?: string;
+  desempenho?: string;
   data_execucao?: string;
   atualizado_em?: string;
   distanceKm?: number;
+  duration?: string;
   pace?: string;
   feeling?: number;
   executedAt?: string;
   notes?: string;
 }
 
-export type WorkoutStatus = 'pendente' | 'finalizado';
+export type WorkoutStatus = 'pendente' | 'finalizado' | 'perdido' | 'parcial' | 'substituido';
 
 export interface Workout {
   id: string;

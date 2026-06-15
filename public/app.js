@@ -1,6 +1,6 @@
-const STORAGE_KEY = 'mypace:runner:v7';
+const STORAGE_KEY = 'mypace:runner:v8';
 const SETTINGS_KEY = 'mypace:settings:v3';
-const PLAN_VERSION = '6.1.0';
+const PLAN_VERSION = '6.2.0';
 const LOGIN_PATH = '/login';
 
 let state = null;
@@ -14,6 +14,7 @@ let supabaseClient = null;
 let session = null;
 let localMode = false;
 let modalContext = null;
+let preparationFilters = { week: 'all', phase: 'all', type: 'all', status: 'all' };
 let resolveAuthReady = null;
 const authReady = new Promise((resolve) => {
   resolveAuthReady = resolve;
@@ -100,6 +101,7 @@ function bindEvents() {
 
   document.body.addEventListener('click', handleClick);
   document.body.addEventListener('input', handleInput);
+  document.body.addEventListener('change', handleInput);
   document.body.addEventListener('submit', handleSubmit);
   window.addEventListener('popstate', handleRouteChange);
 }
@@ -254,7 +256,7 @@ function mergeExecutions(target, saved) {
     week.workouts.forEach((workout) => {
       const old = byId.get(workout.id) ?? byDateType.get(`${workout.date}|${workout.type}`);
       if (!old) return;
-      workout.status = old.status === 'finalizado' ? 'finalizado' : 'pendente';
+      workout.status = normalizeWorkoutStatus(old.status);
       workout.execution = normalizeExecution(old.execution ?? {});
     });
   });
@@ -299,6 +301,12 @@ function handleClick(event) {
     if (name === 'week-prev' || name === 'week-next') {
       const delta = name === 'week-prev' ? -1 : 1;
       selectedWeek = String(clamp(Number(selectedWeek) + delta, 1, state.weeks.length));
+      render();
+      return;
+    }
+
+    if (name === 'clear-preparation-filters') {
+      preparationFilters = { week: 'all', phase: 'all', type: 'all', status: 'all' };
       render();
       return;
     }
@@ -372,8 +380,26 @@ function handleInput(event) {
     if (cursorAtEnd) target.setSelectionRange(target.value.length, target.value.length);
   }
 
+  if (target.name === 'duration') {
+    target.value = maskDuration(target.value);
+  }
+
+  if (['distance', 'duration'].includes(target.name)) {
+    updateAutoPace(target.closest('form'));
+  }
+
+  if (target.name === 'executionStatus') {
+    target.closest('form')?.querySelector('#replacementField')?.toggleAttribute('hidden', target.value !== 'substituido');
+    target.closest('form')?.querySelector('#trainingFields')?.toggleAttribute('hidden', target.value === 'perdido');
+  }
+
   if (target.name === 'rpe') {
     document.querySelector('#rpeValue').textContent = target.value;
+  }
+
+  if (target.dataset.filter) {
+    preparationFilters[target.dataset.filter] = target.value;
+    render();
   }
 }
 
@@ -451,7 +477,7 @@ function todayPendingCard({ workout, weekIndex, workoutIndex }) {
 function todayDoneCard({ workout, weekIndex, workoutIndex }) {
   return `
     <article class="today-card is-done">
-      <span class="finish-badge">Concluido hoje ✓</span>
+      <span class="finish-badge">${escapeHtml(statusLabel(workout.status))}</span>
       <p class="eyebrow">${dayFullDate(workout.date)}</p>
       <h2>${escapeHtml(workout.type)}</h2>
       ${workoutResultSummary(workout, true)}
@@ -555,8 +581,10 @@ function renderWeek() {
 function renderPreparation() {
   const allWorkouts = state.weeks.flatMap((week) => week.workouts);
   const runWorkouts = allWorkouts.filter((workout) => workout.distanceKm > 0);
-  const completed = runWorkouts.filter(isWorkoutFinished).length;
+  const completed = runWorkouts.filter(isWorkoutRecorded).length;
   const totalKm = state.weeks.reduce((sum, week) => sum + Number(week.targetVolumeKm || 0), 0);
+  const filteredWeeks = filteredPreparationWeeks();
+  const filteredCount = filteredWeeks.reduce((sum, week) => sum + week.workouts.length, 0);
 
   return `
     <section class="preparation-layout">
@@ -564,19 +592,103 @@ function renderPreparation() {
         ${compactMetric('Semanas', state.weeks.length)}
         ${compactMetric('Treinos', allWorkouts.length)}
         ${compactMetric('Volume planejado', `${round(totalKm)} km`)}
-        ${compactMetric('Corridas concluidas', `${completed}/${runWorkouts.length}`)}
+        ${compactMetric('Registros', `${completed}/${runWorkouts.length}`)}
       </article>
 
+      ${preparationFiltersCard(filteredCount)}
+
       <div class="preparation-list">
-        ${state.weeks.map((week, weekIndex) => preparationWeekCard(week, weekIndex)).join('')}
+        ${filteredWeeks.map((week) => preparationWeekCard(week, week.weekIndex)).join('') || emptyFilteredState()}
       </div>
     </section>
   `;
 }
 
+function preparationFiltersCard(count) {
+  const phases = [...new Set(state.weeks.map((week) => week.phase))];
+  const types = [...new Set(state.weeks.flatMap((week) => week.workouts).filter((workout) => workout.distanceKm > 0).map((workout) => workout.type))];
+  return `
+    <article class="filter-card">
+      <label>
+        Semana
+        <select data-filter="week">
+          <option value="all" ${preparationFilters.week === 'all' ? 'selected' : ''}>Todas</option>
+          ${state.weeks.map((week) => `<option value="${week.week}" ${String(preparationFilters.week) === String(week.week) ? 'selected' : ''}>Semana ${pad2(week.week)}</option>`).join('')}
+        </select>
+      </label>
+      <label>
+        Fase
+        <select data-filter="phase">
+          <option value="all" ${preparationFilters.phase === 'all' ? 'selected' : ''}>Todas</option>
+          ${phases.map((phase) => `<option value="${escapeAttr(phase)}" ${preparationFilters.phase === phase ? 'selected' : ''}>${escapeHtml(phase)}</option>`).join('')}
+        </select>
+      </label>
+      <label>
+        Tipo
+        <select data-filter="type">
+          <option value="all" ${preparationFilters.type === 'all' ? 'selected' : ''}>Todos</option>
+          ${types.map((type) => `<option value="${escapeAttr(type)}" ${preparationFilters.type === type ? 'selected' : ''}>${escapeHtml(type)}</option>`).join('')}
+        </select>
+      </label>
+      <label>
+        Status
+        <select data-filter="status">
+          ${statusFilterOptions().map((option) => `<option value="${option.value}" ${preparationFilters.status === option.value ? 'selected' : ''}>${option.label}</option>`).join('')}
+        </select>
+      </label>
+      <button class="button secondary" data-action="clear-preparation-filters" type="button">
+        <i data-lucide="rotate-ccw"></i>
+        <span>Limpar</span>
+      </button>
+      <span class="filter-count">${count} treinos</span>
+    </article>
+  `;
+}
+
+function filteredPreparationWeeks() {
+  return state.weeks
+    .map((week, weekIndex) => ({
+      ...week,
+      weekIndex,
+      workouts: week.workouts.filter((workout) => matchesPreparationFilters(week, workout)),
+    }))
+    .filter((week) => week.workouts.length);
+}
+
+function matchesPreparationFilters(week, workout) {
+  if (preparationFilters.week !== 'all' && String(week.week) !== String(preparationFilters.week)) return false;
+  if (preparationFilters.phase !== 'all' && week.phase !== preparationFilters.phase) return false;
+  if (preparationFilters.type !== 'all' && workout.type !== preparationFilters.type) return false;
+  if (preparationFilters.status !== 'all' && workoutStatusKey(workout) !== preparationFilters.status) return false;
+  return true;
+}
+
+function statusFilterOptions() {
+  return [
+    { value: 'all', label: 'Todos' },
+    { value: 'finalizado', label: 'Feitos' },
+    { value: 'parcial', label: 'Parciais' },
+    { value: 'substituido', label: 'Substituidos' },
+    { value: 'perdido', label: 'Perdidos' },
+    { value: 'pendente', label: 'Pendentes' },
+  ];
+}
+
+function emptyFilteredState() {
+  return `
+    <article class="empty-state">
+      <div class="empty-icon"><i data-lucide="filter-x"></i></div>
+      <div>
+        <h2>Nenhum treino encontrado</h2>
+        <p>Ajuste os filtros para visualizar a preparacao.</p>
+      </div>
+    </article>
+  `;
+}
+
 function preparationWeekCard(week, weekIndex) {
   const runWorkouts = week.workouts.filter((workout) => workout.distanceKm > 0);
-  const done = runWorkouts.filter(isWorkoutFinished).length;
+  const done = runWorkouts.filter(isWorkoutRecorded).length;
 
   return `
     <article class="preparation-week-card">
@@ -601,7 +713,7 @@ function preparationWeekCard(week, weekIndex) {
 function preparationWorkoutRow(workout, weekIndex, workoutIndex) {
   const isRest = Number(workout.distanceKm || 0) === 0;
   const status = workoutVisualStatus(workout);
-  const action = isWorkoutFinished(workout) ? 'view-register' : 'open-register';
+  const action = isWorkoutRecorded(workout) ? 'view-register' : 'open-register';
   const disabled = isRest ? 'disabled' : '';
 
   return `
@@ -628,7 +740,7 @@ function preparationWorkoutRow(workout, weekIndex, workoutIndex) {
 function weekWorkoutRow(workout, weekIndex, workoutIndex) {
   const status = workoutVisualStatus(workout);
   const isRest = Number(workout.distanceKm || 0) === 0;
-  const action = isWorkoutFinished(workout) ? 'view-register' : 'open-register';
+  const action = isWorkoutRecorded(workout) ? 'view-register' : 'open-register';
   const disabled = isRest ? 'disabled' : '';
 
   return `
@@ -657,18 +769,21 @@ function weekWorkoutRow(workout, weekIndex, workoutIndex) {
 
 function renderReport() {
   const finished = finishedWorkouts();
-  const summary = reportSummary(finished);
+  const recorded = recordedWorkouts();
+  const summary = reportSummary(finished, recorded);
   const completed = completedWorkouts();
+  const alerts = trainingAlerts(finished, recorded);
 
-  if (!finished.length) {
+  if (!recorded.length) {
     return `
       <section class="report-layout">
         ${cycleProgressCard(completed)}
+        ${progressCards(summary)}
         <article class="empty-state">
           <div class="empty-icon"><i data-lucide="bar-chart-3"></i></div>
           <div>
             <h2>Evolucao ainda sem dados</h2>
-            <p>Os graficos aparecem depois do primeiro treino finalizado.</p>
+            <p>Os graficos aparecem depois do primeiro registro.</p>
           </div>
         </article>
       </section>
@@ -678,31 +793,34 @@ function renderReport() {
   return `
     <section class="report-layout">
       ${cycleProgressCard(completed)}
+      ${progressCards(summary)}
+      ${alertsCard(alerts)}
+      ${projectionCard(summary)}
 
-      <article class="feature-card">
+      <article class="feature-card chart-card">
         <div class="card-header">
           <div>
             <p class="eyebrow">Evolucao de pace</p>
-            <h2>Treinos finalizados</h2>
+            <h2>Treinos com pace</h2>
           </div>
         </div>
-        ${paceChart(finished)}
+        ${finished.length ? paceChart(finished) : '<p>Nenhum registro com pace valido ainda.</p>'}
       </article>
 
-      <div class="report-metrics">
-        ${compactMetric('Pace medio', summary.averagePace, true)}
-        ${compactMetric('Volume total', summary.totalKm)}
-        ${compactMetric('PR provavel', summary.probablePr)}
-        ${compactMetric('Carga', summary.load)}
+      <div class="chart-grid">
+        ${weeklyVolumeChart(summary.weekly)}
+        ${rpeChart(finished)}
+        ${adherenceChart(summary.weekly)}
       </div>
 
       ${recentCommentsCard(finished)}
+      ${historyCard(recorded)}
 
       <article class="export-card">
         <div class="export-icon"><i data-lucide="file-text"></i></div>
         <div>
           <h2>Relatorio exportavel</h2>
-          <p>Exporta somente treinos finalizados com registros reais.</p>
+          <p>Exporta todos os registros com status, contexto e desempenho.</p>
         </div>
         <button class="button primary" type="button" onclick="window.exportJson()">Exportar JSON</button>
       </article>
@@ -741,7 +859,7 @@ function openRegistrationModal(weekIndex, workoutIndex, forceEdit) {
   const workout = state.weeks[weekIndex]?.workouts[workoutIndex];
   if (!workout || Number(workout.distanceKm || 0) === 0) return;
   modalContext = { weekIndex, workoutIndex };
-  modalContent.innerHTML = isWorkoutFinished(workout) && !forceEdit
+  modalContent.innerHTML = isWorkoutRecorded(workout) && !forceEdit
     ? registrationSummary(workout, weekIndex, workoutIndex)
     : registrationForm(workout);
   registrationModal.hidden = false;
@@ -755,8 +873,11 @@ function closeRegistrationModal() {
 }
 
 function registrationForm(workout) {
-  const execution = normalizeExecution(workout.execution ?? {});
+  const execution = normalizeExecution(workout.execution ?? {}, workout.status);
   const hasComment = Boolean(execution.comentario);
+  const status = execution.status && execution.status !== 'pendente' ? execution.status : 'finalizado';
+  const trainingFieldsHidden = status === 'perdido' ? 'hidden' : '';
+  const replacementHidden = status === 'substituido' ? '' : 'hidden';
 
   return `
     <form id="quickRegisterForm" class="quick-register" novalidate>
@@ -764,18 +885,35 @@ function registrationForm(workout) {
       <p class="modal-subtitle">${dayFullDate(workout.date)} · ${escapeHtml(workout.type)}</p>
 
       <label>
-        Quantos km voce correu?
-        <div class="unit-input">
-          <input name="distance" type="number" min="0" step="0.1" value="${escapeAttr(execution.km_real ?? workout.distanceKm)}" required />
-          <b>km</b>
-        </div>
+        Status do treino
+        <select name="executionStatus">
+          ${executionStatusOptions().map((option) => `<option value="${option.value}" ${status === option.value ? 'selected' : ''}>${option.label}</option>`).join('')}
+        </select>
       </label>
 
-      <label>
-        Qual foi seu pace medio?
-        <input name="pace" type="text" inputmode="numeric" placeholder="${escapeAttr(firstPace(workout.paceTarget) ?? '6:55')}" value="${escapeAttr(execution.pace_real ?? '')}" required />
-        <span class="field-error" id="paceError" hidden>Digite no formato mm:ss</span>
-      </label>
+      <div class="training-fields" id="trainingFields" ${trainingFieldsHidden}>
+        <label>
+          Distancia real
+          <div class="unit-input">
+            <input name="distance" type="number" min="0" step="0.1" value="${escapeAttr(execution.km_real ?? workout.distanceKm)}" />
+            <b>km</b>
+          </div>
+          <span class="field-error" id="distanceError" hidden>Informe uma distancia maior que zero.</span>
+        </label>
+
+        <label>
+          Tempo total
+          <input name="duration" type="text" inputmode="numeric" placeholder="42:30 ou 1:42:30" value="${escapeAttr(execution.tempo_real ?? '')}" />
+          <span class="field-error" id="durationError" hidden>Digite o tempo em mm:ss ou h:mm:ss.</span>
+        </label>
+
+        <label>
+          Pace medio
+          <input name="pace" type="text" inputmode="numeric" placeholder="${escapeAttr(firstPace(workout.paceTarget) ?? '5:41')}" value="${escapeAttr(execution.pace_real ?? '')}" />
+          <span class="field-hint" id="paceHint">Calculado automaticamente pela distancia e tempo.</span>
+          <span class="field-error" id="paceError" hidden>Digite no formato mm:ss.</span>
+        </label>
+      </div>
 
       <label class="rpe-field">
         <span>Como foi o esforco?</span>
@@ -787,6 +925,32 @@ function registrationForm(workout) {
           <small class="hard">Forte</small>
           <small class="max">Maximo</small>
         </div>
+      </label>
+
+      <div class="form-grid">
+        <label>
+          Dor
+          <select name="pain">
+            ${selectOptions(['nenhuma', 'leve', 'moderada', 'forte'], execution.dor ?? 'nenhuma')}
+          </select>
+        </label>
+        <label>
+          Sono
+          <select name="sleep">
+            ${selectOptions(['bom', 'regular', 'ruim'], execution.sono ?? 'regular')}
+          </select>
+        </label>
+      </div>
+
+      <label>
+        Clima
+        <input name="weather" type="text" placeholder="Ex.: quente, umido, chuva leve" value="${escapeAttr(execution.clima ?? '')}" />
+      </label>
+
+      <label id="replacementField" ${replacementHidden}>
+        O que substituiu?
+        <input name="replacement" type="text" placeholder="Ex.: bike 45 min, esteira leve, caminhada" value="${escapeAttr(execution.substituicao ?? '')}" />
+        <span class="field-error" id="replacementError" hidden>Descreva o treino substituto.</span>
       </label>
 
       <button class="text-link" data-action="toggle-comment" type="button" ${hasComment ? 'hidden' : ''}>+ Adicionar comentario</button>
@@ -803,12 +967,13 @@ function registrationForm(workout) {
 }
 
 function registrationSummary(workout, weekIndex, workoutIndex) {
-  const execution = normalizeExecution(workout.execution ?? {});
+  const execution = normalizeExecution(workout.execution ?? {}, workout.status);
   return `
     <div class="quick-register">
-      <h2 id="modalTitle">Registro concluido</h2>
+      <h2 id="modalTitle">${escapeHtml(statusLabel(workout.status))}</h2>
       <p class="modal-subtitle">${dayFullDate(workout.date)} · ${escapeHtml(workout.type)}</p>
       ${workoutResultSummary(workout, true)}
+      ${execution.desempenho ? `<p class="performance-sentence">${escapeHtml(execution.desempenho)}</p>` : ''}
       ${execution.comentario ? `<p class="summary-comment"><em>&ldquo;${escapeHtml(execution.comentario)}&rdquo;</em></p>` : '<p class="summary-comment muted">Sem comentario registrado.</p>'}
       <button class="button secondary" data-action="edit-register" data-week="${weekIndex}" data-workout="${workoutIndex}" type="button">
         <span>Editar registro</span>
@@ -821,39 +986,80 @@ function confirmRegistration(form) {
   if (!modalContext) return;
   const workout = state.weeks[modalContext.weekIndex].workouts[modalContext.workoutIndex];
   const data = new FormData(form);
+  const status = String(data.get('executionStatus') ?? 'finalizado');
   const distance = Number(data.get('distance'));
+  const duration = normalizeDurationInput(String(data.get('duration') ?? ''));
   const pace = normalizePaceInput(String(data.get('pace') ?? ''));
   const rpe = Number(data.get('rpe') ?? 5);
+  const pain = String(data.get('pain') ?? 'nenhuma');
+  const sleep = String(data.get('sleep') ?? 'regular');
+  const weather = String(data.get('weather') ?? '').trim();
+  const replacement = String(data.get('replacement') ?? '').trim();
   const comment = String(data.get('comment') ?? '').trim();
+  const requiresTrainingData = status !== 'perdido';
   const paceField = form.querySelector('[name="pace"]');
   const paceError = form.querySelector('#paceError');
+  const distanceField = form.querySelector('[name="distance"]');
+  const distanceError = form.querySelector('#distanceError');
+  const durationField = form.querySelector('[name="duration"]');
+  const durationError = form.querySelector('#durationError');
+  const replacementField = form.querySelector('[name="replacement"]');
+  const replacementError = form.querySelector('#replacementError');
+  const validDistance = !requiresTrainingData || (Number.isFinite(distance) && distance > 0);
+  const validDuration = !requiresTrainingData || isValidDuration(duration);
+  const validPace = !requiresTrainingData || isValidPace(pace);
+  const validReplacement = status !== 'substituido' || replacement.length >= 3;
 
-  paceField.classList.toggle('is-invalid', !isValidPace(pace));
-  paceError.hidden = isValidPace(pace);
+  distanceField?.classList.toggle('is-invalid', !validDistance);
+  durationField?.classList.toggle('is-invalid', !validDuration);
+  paceField?.classList.toggle('is-invalid', !validPace);
+  replacementField?.classList.toggle('is-invalid', !validReplacement);
+  if (distanceError) distanceError.hidden = validDistance;
+  if (durationError) durationError.hidden = validDuration;
+  if (paceError) paceError.hidden = validPace;
+  if (replacementError) replacementError.hidden = validReplacement;
 
-  if (!Number.isFinite(distance) || distance <= 0) {
-    form.querySelector('[name="distance"]').focus();
+  if (!validDistance) {
+    distanceField?.focus();
     return;
   }
 
-  if (!isValidPace(pace)) {
-    paceField.focus();
+  if (!validDuration) {
+    durationField?.focus();
     return;
   }
 
-  const current = normalizeExecution(workout.execution ?? {});
+  if (!validPace) {
+    paceField?.focus();
+    return;
+  }
+
+  if (!validReplacement) {
+    replacementField?.focus();
+    return;
+  }
+
+  const current = normalizeExecution(workout.execution ?? {}, workout.status);
   const executionDate = current.data_execucao ?? toIsoDate(new Date());
-  workout.status = 'finalizado';
+  workout.status = status;
   workout.execution = {
-    done: true,
-    km_real: round(distance),
-    pace_real: pace,
+    done: status === 'finalizado',
+    status,
+    km_real: requiresTrainingData ? round(distance) : 0,
+    tempo_real: requiresTrainingData ? duration : '',
+    pace_real: requiresTrainingData ? pace : '',
     rpe,
+    dor: pain,
+    sono: sleep,
+    clima: weather,
+    substituicao: replacement,
     comentario: comment,
+    desempenho: performanceSentence(workout, { status, distance, pace, rpe, pain }),
     data_execucao: executionDate,
     atualizado_em: new Date().toISOString(),
-    distanceKm: round(distance),
-    pace,
+    distanceKm: requiresTrainingData ? round(distance) : 0,
+    duration: requiresTrainingData ? duration : '',
+    pace: requiresTrainingData ? pace : '',
     feeling: rpe,
     notes: comment,
     executedAt: executionDate,
@@ -862,7 +1068,7 @@ function confirmRegistration(form) {
   persist({ silent: true });
   closeRegistrationModal();
   render();
-  showToast('Treino salvo ✓');
+  showToast(status === 'perdido' ? 'Treino marcado como perdido' : 'Registro salvo ✓');
 }
 
 function todayContext() {
@@ -872,7 +1078,7 @@ function todayContext() {
     if (Number(current.workout.distanceKm || 0) === 0) {
       return { kind: 'rest', ...current, next: nextWorkoutFromDate(today) };
     }
-    return { kind: isWorkoutFinished(current.workout) ? 'done' : 'pending', ...current };
+    return { kind: isWorkoutRecorded(current.workout) ? 'done' : 'pending', ...current };
   }
 
   const missed = latestMissedWorkout(today);
@@ -882,7 +1088,7 @@ function todayContext() {
 
 function latestMissedWorkout(date) {
   return allWorkoutRefs()
-    .filter((item) => item.workout.date < date && item.workout.distanceKm > 0 && !isWorkoutFinished(item.workout))
+    .filter((item) => item.workout.date < date && item.workout.distanceKm > 0 && !isWorkoutRecorded(item.workout))
     .sort((a, b) => b.workout.date.localeCompare(a.workout.date))[0] ?? null;
 }
 
@@ -923,7 +1129,7 @@ function weekProgressCard(progress) {
   return `
     <article class="feature-card progress-card">
       <div class="progress-label">
-        <span>${progress.done} de ${progress.total} treinos concluidos esta semana</span>
+        <span>${progress.done} de ${progress.total} treinos registrados esta semana</span>
         <strong>${progress.percent}%</strong>
       </div>
       <div class="progress-track"><span style="width:${progress.percent}%"></span></div>
@@ -936,7 +1142,7 @@ function cycleProgressCard(progress) {
     <article class="feature-card progress-card">
       <div class="progress-label">
         <span>Total geral</span>
-        <strong>${progress.done} de ${progress.total} treinos concluidos na periodizacao · ${progress.percent}%</strong>
+        <strong>${progress.done} de ${progress.total} treinos registrados na periodizacao · ${progress.percent}%</strong>
       </div>
       <div class="progress-track"><span style="width:${progress.percent}%"></span></div>
     </article>
@@ -944,13 +1150,25 @@ function cycleProgressCard(progress) {
 }
 
 function workoutResultSummary(workout, includeComment = false) {
-  const execution = normalizeExecution(workout.execution ?? {});
+  const execution = normalizeExecution(workout.execution ?? {}, workout.status);
+  const status = statusLabel(workout.status);
   return `
     <div class="result-summary">
+      ${compactMetric('Status', status)}
       ${compactMetric('Km real', execution.km_real ? `${execution.km_real} km` : '-')}
+      ${compactMetric('Tempo', execution.tempo_real || '-')}
       ${compactMetric('Pace real', execution.pace_real ? `${execution.pace_real}/km` : '-', true)}
       ${compactMetric('RPE', execution.rpe ?? '-')}
+      ${compactMetric('Dor', execution.dor ?? '-')}
     </div>
+    <div class="context-line">
+      <span>Planejado: ${escapeHtml(workout.distanceLabel ?? `${workout.distanceKm} km`)}</span>
+      <span>Alvo: ${escapeHtml(compactPaceTarget(workout.paceTarget))}</span>
+      <span>Sono: ${escapeHtml(execution.sono ?? '-')}</span>
+      <span>Clima: ${escapeHtml(execution.clima || '-')}</span>
+      ${execution.substituicao ? `<span>Substituto: ${escapeHtml(execution.substituicao)}</span>` : ''}
+    </div>
+    ${execution.desempenho ? `<p class="performance-sentence">${escapeHtml(execution.desempenho)}</p>` : ''}
     ${includeComment && execution.comentario ? `<p class="summary-comment"><em>&ldquo;${escapeHtml(execution.comentario)}&rdquo;</em></p>` : ''}
   `;
 }
@@ -981,6 +1199,149 @@ function paceChart(items) {
         }).join('')}
       </div>
     </div>
+  `;
+}
+
+function progressCards(summary) {
+  return `
+    <div class="report-metrics">
+      ${compactMetric('Km registrados', summary.totalKm)}
+      ${compactMetric('Treinos registrados', summary.workoutsDone)}
+      ${compactMetric('Consistencia', summary.consistency)}
+      ${compactMetric('Melhor pace', summary.bestPace, true)}
+    </div>
+  `;
+}
+
+function alertsCard(alerts) {
+  return `
+    <article class="feature-card alerts-card ${alerts.some((alert) => alert.level === 'danger') ? 'has-danger' : ''}">
+      <div class="card-header">
+        <div>
+          <p class="eyebrow">Alertas</p>
+          <h2>Fadiga e meta</h2>
+        </div>
+      </div>
+      ${alerts.map((alert) => `
+        <div class="alert-row ${alert.level}">
+          <i data-lucide="${alert.icon}"></i>
+          <p>${escapeHtml(alert.message)}</p>
+        </div>
+      `).join('')}
+    </article>
+  `;
+}
+
+function projectionCard(summary) {
+  const projection = summary.probablePr;
+  const pace = summary.projectionSeconds ? `${formatPace(summary.projectionSeconds)}/km` : '-';
+  const goal = parsePaceToSeconds(settings.paceGoal) ?? 341;
+  const delta = summary.projectionSeconds ? summary.projectionSeconds - goal : null;
+  const message = delta === null
+    ? 'Registre alguns treinos com pace para projetar a meia.'
+    : delta <= 0
+      ? 'A tendencia atual conversa com a meta sub-2h.'
+      : `A tendencia esta ${Math.round(delta)}s/km acima da meta. Ajuste carga, recuperacao e consistencia antes de forcar ritmo.`;
+
+  return `
+    <article class="feature-card projection-card">
+      <div>
+        <p class="eyebrow">Projecao</p>
+        <h2>Meia maratona provavel</h2>
+      </div>
+      <div class="projection-main">
+        <strong>${escapeHtml(projection)}</strong>
+        <span>${escapeHtml(pace)}</span>
+      </div>
+      <p>${escapeHtml(message)}</p>
+    </article>
+  `;
+}
+
+function weeklyVolumeChart(weekly) {
+  const visible = weekly.filter((week) => week.recorded || week.week <= Number(selectedWeek)).slice(-8);
+  const max = Math.max(1, ...visible.map((week) => week.volume));
+  return smallBarChart('Volume semanal', 'Km registrados', visible, (week) => week.volume, max, 'km');
+}
+
+function rpeChart(items) {
+  const visible = items.slice(-8).map((item) => ({ week: item.chartLabel, value: Number(item.execution.rpe || 0) }));
+  return smallBarChart('RPE', 'Esforco recente', visible, (item) => item.value, 10, '');
+}
+
+function adherenceChart(weekly) {
+  const visible = weekly.filter((week) => week.recorded || week.week <= Number(selectedWeek)).slice(-8);
+  return smallBarChart('Aderencia', 'Registros por semana', visible, (week) => week.adherence, 100, '%');
+}
+
+function smallBarChart(title, subtitle, items, valueGetter, max, suffix) {
+  return `
+    <article class="feature-card mini-chart-card">
+      <p class="eyebrow">${escapeHtml(subtitle)}</p>
+      <h2>${escapeHtml(title)}</h2>
+      <div class="mini-chart">
+        ${items.map((item) => {
+          const value = Number(valueGetter(item) || 0);
+          const height = Math.max(8, Math.round((value / Math.max(1, max)) * 112));
+          const label = item.chartLabel ?? `S${pad2(item.week)}`;
+          return `
+            <div class="mini-bar-item">
+              <span>${escapeHtml(`${value}${suffix}`)}</span>
+              <b style="height:${height}px"></b>
+              <small>${escapeHtml(label)}</small>
+            </div>
+          `;
+        }).join('') || '<p>Sem dados.</p>'}
+      </div>
+    </article>
+  `;
+}
+
+function trainingAlerts(finished, recorded) {
+  const alerts = [];
+  const recentRecorded = recorded.slice(-5);
+  const highRpe = recentRecorded.filter((workout) => Number(workout.execution.rpe) >= 8).length;
+  const pain = recentRecorded.filter((workout) => ['moderada', 'forte'].includes(workout.execution.dor)).length;
+  const lost = recentRecorded.filter((workout) => workout.status === 'perdido').length;
+  const goal = parsePaceToSeconds(settings.paceGoal) ?? 341;
+  const recentPace = finished.slice(-4);
+  const avgRecentPace = recentPace.length
+    ? Math.round(recentPace.reduce((sum, workout) => sum + workout.paceSeconds, 0) / recentPace.length)
+    : null;
+
+  if (highRpe >= 2) alerts.push({ level: 'danger', icon: 'activity', message: 'RPE alto em pelo menos 2 registros recentes. Reduza intensidade se isso vier com sono ruim ou dor.' });
+  if (pain >= 1) alerts.push({ level: 'danger', icon: 'circle-alert', message: 'Dor moderada/forte apareceu nos registros recentes. Evite qualidade ate correr sem alterar passada.' });
+  if (lost >= 2) alerts.push({ level: 'warn', icon: 'calendar-x', message: 'Dois treinos recentes foram perdidos. Mantenha o calendario e nao tente compensar volume de uma vez.' });
+  if (avgRecentPace && avgRecentPace > goal + 25) alerts.push({ level: 'warn', icon: 'target', message: 'Pace recente ainda esta acima da faixa sub-2h. A meta pode precisar de ajuste se isso persistir nos checkpoints.' });
+  if (!alerts.length) alerts.push({ level: 'good', icon: 'check-circle-2', message: 'Sem alerta relevante pelos registros recentes. Continue priorizando consistencia e recuperacao.' });
+  return alerts;
+}
+
+function historyCard(items) {
+  return `
+    <article class="feature-card history-card">
+      <div class="card-header">
+        <div>
+          <p class="eyebrow">Historico</p>
+          <h2>Todos os registros</h2>
+        </div>
+      </div>
+      <div class="history-list">
+        ${items.slice().reverse().map((item) => `
+          <div class="history-row">
+            <div>
+              <strong>${dayShortDate(item.execution.data_execucao ?? item.date)} · ${escapeHtml(item.type)}</strong>
+              <span>${escapeHtml(statusLabel(item.status))} · Planejado ${escapeHtml(item.distanceLabel ?? `${item.distanceKm} km`)} · Real ${escapeHtml(item.execution.km_real ? `${item.execution.km_real} km` : '-')}</span>
+              ${item.execution.desempenho ? `<p>${escapeHtml(item.execution.desempenho)}</p>` : ''}
+            </div>
+            <div>
+              <b>${escapeHtml(item.execution.pace_real ? `${item.execution.pace_real}/km` : '-')}</b>
+              <small>RPE ${escapeHtml(item.execution.rpe ?? '-')}</small>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </article>
   `;
 }
 
@@ -1021,7 +1382,10 @@ function zonePill(zone) {
 
 function statusBadge(status) {
   if (status.className === 'rest') return '<span class="status-pill">Descanso</span>';
-  if (status.className === 'done') return '<span class="status-pill done">Feito ✓</span>';
+  if (status.className === 'finalizado') return '<span class="status-pill done">Feito ✓</span>';
+  if (status.className === 'parcial') return '<span class="status-pill partial">Parcial</span>';
+  if (status.className === 'substituido') return '<span class="status-pill replaced">Substituido</span>';
+  if (status.className === 'perdido') return '<span class="status-pill lost">Perdido</span>';
   if (status.className === 'today') return '<span class="status-pill today">Hoje</span>';
   if (status.className === 'missed') return '<span class="status-pill missed">Nao registrado</span>';
   return '<span class="status-pill">Futuro</span>';
@@ -1029,7 +1393,7 @@ function statusBadge(status) {
 
 function workoutVisualStatus(workout) {
   if (Number(workout.distanceKm || 0) === 0) return { className: 'rest' };
-  if (isWorkoutFinished(workout)) return { className: 'done' };
+  if (isWorkoutRecorded(workout)) return { className: workoutStatusKey(workout) };
   if (workout.date === toIsoDate(new Date())) return { className: 'today' };
   if (workout.date < toIsoDate(new Date())) return { className: 'missed' };
   return { className: 'future' };
@@ -1037,7 +1401,7 @@ function workoutVisualStatus(workout) {
 
 function currentWeek() {
   return weekForDate(toIsoDate(new Date()))
-    ?? state.weeks.find((week) => week.workouts.some((workout) => !isWorkoutFinished(workout) && workout.distanceKm > 0))
+    ?? state.weeks.find((week) => week.workouts.some((workout) => !isWorkoutRecorded(workout) && workout.distanceKm > 0))
     ?? state.weeks.at(-1);
 }
 
@@ -1058,28 +1422,29 @@ function workoutByDate(date) {
 }
 
 function nextWorkoutFromDate(date) {
-  return allWorkoutRefs().find((item) => item.workout.date > date && !isWorkoutFinished(item.workout) && item.workout.distanceKm > 0)
-    ?? allWorkoutRefs().find((item) => !isWorkoutFinished(item.workout) && item.workout.distanceKm > 0)
+  return allWorkoutRefs().find((item) => item.workout.date > date && !isWorkoutRecorded(item.workout) && item.workout.distanceKm > 0)
+    ?? allWorkoutRefs().find((item) => !isWorkoutRecorded(item.workout) && item.workout.distanceKm > 0)
     ?? null;
 }
 
 function weekProgress(week) {
   const all = (week?.workouts ?? []).filter((workout) => workout.distanceKm > 0);
-  const done = all.filter(isWorkoutFinished);
+  const done = all.filter(isWorkoutRecorded);
   return { done: done.length, total: all.length, percent: all.length ? Math.round((done.length / all.length) * 100) : 0 };
 }
 
 function completedWorkouts() {
   const all = state.weeks.flatMap((week) => week.workouts).filter((workout) => workout.distanceKm > 0);
-  const done = all.filter(isWorkoutFinished);
+  const done = all.filter(isWorkoutRecorded);
   return { done: done.length, total: all.length, percent: all.length ? Math.round((done.length / all.length) * 100) : 0 };
 }
 
 function finishedWorkouts() {
   const items = state.weeks
-    .flatMap((week) => week.workouts.map((workout) => ({ ...workout, weekNumber: week.week, execution: normalizeExecution(workout.execution ?? {}) })))
+    .flatMap((week) => week.workouts.map((workout) => ({ ...workout, weekNumber: week.week, execution: normalizeExecution(workout.execution ?? {}, workout.status) })))
     .filter((workout) =>
-      workout.status === 'finalizado'
+      isWorkoutRecorded(workout)
+      && workout.status !== 'perdido'
       && workout.distanceKm > 0
       && Number(workout.execution.km_real || 0) > 0
       && isValidPace(workout.execution.pace_real)
@@ -1088,6 +1453,13 @@ function finishedWorkouts() {
     )
     .map((workout) => ({ ...workout, paceSeconds: parsePaceToSeconds(workout.execution.pace_real) }));
   return withDistinctChartLabels(items);
+}
+
+function recordedWorkouts() {
+  return state.weeks
+    .flatMap((week) => week.workouts.map((workout) => ({ ...workout, weekNumber: week.week, execution: normalizeExecution(workout.execution ?? {}, workout.status) })))
+    .filter((workout) => workout.distanceKm > 0 && isWorkoutRecorded(workout))
+    .sort((a, b) => `${a.execution.data_execucao ?? a.date}`.localeCompare(`${b.execution.data_execucao ?? b.date}`));
 }
 
 function withDistinctChartLabels(items) {
@@ -1100,25 +1472,67 @@ function withDistinctChartLabels(items) {
   });
 }
 
-function reportSummary(items) {
+function reportSummary(items, recorded = recordedWorkouts()) {
   const count = items.length;
-  const totalKm = items.reduce((sum, item) => sum + Number(item.execution.km_real || 0), 0);
-  const avgPace = Math.round(items.reduce((sum, item) => sum + item.paceSeconds, 0) / count);
-  const bestPace = Math.min(...items.map((item) => item.paceSeconds));
+  const totalKm = recorded.reduce((sum, item) => sum + Number(item.execution.km_real || 0), 0);
+  const avgPace = count ? Math.round(items.reduce((sum, item) => sum + item.paceSeconds, 0) / count) : null;
+  const bestPace = count ? Math.min(...items.map((item) => item.paceSeconds)) : null;
+  const completed = completedWorkouts();
+  const adherence = completed.percent;
+  const weekly = weeklyStats(recorded);
   return {
-    averagePace: `${formatPace(avgPace)}/km`,
+    averagePace: avgPace ? `${formatPace(avgPace)}/km` : '-',
     totalKm: `${round(totalKm)} km`,
-    probablePr: estimateHalfMarathonTime(bestPace),
+    bestPace: bestPace ? `${formatPace(bestPace)}/km` : '-',
+    probablePr: bestPace ? estimateHalfMarathonTime(projectedHalfPace(items)) : '-',
+    projectionSeconds: bestPace ? projectedHalfPace(items) : null,
     load: classifyWeekLoad(items.at(-1)?.weekNumber),
+    workoutsDone: `${recorded.length}/${allRunWorkouts().length}`,
+    consistency: `${adherence}%`,
+    weekly,
   };
+}
+
+function allRunWorkouts() {
+  return state.weeks.flatMap((week) => week.workouts).filter((workout) => workout.distanceKm > 0);
+}
+
+function weeklyStats(recorded) {
+  return state.weeks.map((week) => {
+    const runWorkouts = week.workouts.filter((workout) => workout.distanceKm > 0);
+    const records = recorded.filter((workout) => workout.weekNumber === week.week);
+    const done = records.filter((workout) => workout.status === 'finalizado').length;
+    const partial = records.filter((workout) => workout.status === 'parcial' || workout.status === 'substituido').length;
+    const lost = records.filter((workout) => workout.status === 'perdido').length;
+    const volume = records.reduce((sum, workout) => sum + Number(workout.execution.km_real || 0), 0);
+    const rpes = records.map((workout) => Number(workout.execution.rpe)).filter(validRpe);
+    return {
+      week: week.week,
+      planned: runWorkouts.length,
+      recorded: records.length,
+      done,
+      partial,
+      lost,
+      adherence: runWorkouts.length ? Math.round((records.length / runWorkouts.length) * 100) : 0,
+      volume: round(volume),
+      avgRpe: rpes.length ? round(rpes.reduce((sum, value) => sum + value, 0) / rpes.length) : 0,
+    };
+  });
+}
+
+function projectedHalfPace(items) {
+  const recent = items.slice(-6);
+  const weighted = recent.reduce((sum, item, index) => sum + item.paceSeconds * (index + 1), 0);
+  const weights = recent.reduce((sum, _item, index) => sum + index + 1, 0);
+  return Math.round(weighted / Math.max(1, weights));
 }
 
 function classifyWeekLoad(weekNumber) {
   const week = state.weeks.find((item) => item.week === weekNumber);
   if (!week) return '-';
   const realVolume = week.workouts
-    .filter((workout) => workout.status === 'finalizado')
-    .reduce((sum, workout) => sum + Number(normalizeExecution(workout.execution ?? {}).km_real || 0), 0);
+    .filter(isWorkoutRecorded)
+    .reduce((sum, workout) => sum + Number(normalizeExecution(workout.execution ?? {}, workout.status).km_real || 0), 0);
   if (realVolume < 16) return 'baixa';
   if (realVolume <= 32) return 'media';
   return 'alta';
@@ -1140,29 +1554,41 @@ function normalizePlanState() {
       workout.order ??= workoutIndex + 1;
       workout.zone ??= zoneFor(workout);
       workout.durationMinutes ??= estimatedDurationMinutes(workout);
-      workout.execution = normalizeExecution(workout.execution ?? {});
-      if (workout.status === 'finalizado' && !canFinalizeWorkout(workout)) workout.status = 'pendente';
-      workout.status = workout.status === 'finalizado' ? 'finalizado' : 'pendente';
-      workout.execution.done = workout.status === 'finalizado';
+      workout.status = normalizeWorkoutStatus(workout.execution?.status ?? workout.status);
+      workout.execution = normalizeExecution(workout.execution ?? {}, workout.status);
+      if (['finalizado', 'parcial', 'substituido'].includes(workout.status) && !canFinalizeWorkout(workout)) workout.status = 'pendente';
+      if (workout.status === 'perdido') workout.execution.done = false;
+      else workout.execution.done = workout.status === 'finalizado';
+      workout.execution.status = workout.status;
     });
   });
 }
 
-function normalizeExecution(execution) {
+function normalizeExecution(execution, fallbackStatus = 'pendente') {
   const km = execution.km_real ?? execution.distanceKm;
+  const duration = execution.tempo_real ?? execution.duration ?? '';
   const pace = execution.pace_real ?? execution.pace;
   const rpe = execution.rpe ?? execution.feeling;
   const comment = execution.comentario ?? execution.notes ?? '';
   const date = execution.data_execucao ?? execution.executedAt;
+  const status = normalizeWorkoutStatus(execution.status ?? fallbackStatus);
   return {
     ...execution,
-    done: Boolean(execution.done),
+    done: status === 'finalizado',
+    status,
     km_real: km,
+    tempo_real: duration,
     pace_real: pace,
     rpe,
+    dor: execution.dor ?? 'nenhuma',
+    sono: execution.sono ?? 'regular',
+    clima: execution.clima ?? '',
+    substituicao: execution.substituicao ?? '',
     comentario: comment,
+    desempenho: execution.desempenho ?? '',
     data_execucao: date,
     distanceKm: km,
+    duration,
     pace,
     feeling: rpe,
     notes: comment,
@@ -1174,8 +1600,20 @@ function isWorkoutFinished(workout) {
   return workout.status === 'finalizado';
 }
 
+function isWorkoutRecorded(workout) {
+  return ['finalizado', 'parcial', 'substituido', 'perdido'].includes(workout.status);
+}
+
+function normalizeWorkoutStatus(value) {
+  return ['finalizado', 'parcial', 'substituido', 'perdido'].includes(value) ? value : 'pendente';
+}
+
+function workoutStatusKey(workout) {
+  return normalizeWorkoutStatus(workout.status);
+}
+
 function canFinalizeWorkout(workout) {
-  const execution = normalizeExecution(workout.execution ?? {});
+  const execution = normalizeExecution(workout.execution ?? {}, workout.status);
   if (Number(workout.distanceKm || 0) === 0) return false;
   return Number(execution.km_real || 0) > 0 && isValidPace(execution.pace_real) && validRpe(execution.rpe);
 }
@@ -1185,14 +1623,46 @@ function validRpe(value) {
   return Number.isFinite(number) && number >= 1 && number <= 10;
 }
 
+function executionStatusOptions() {
+  return [
+    { value: 'finalizado', label: 'Feito' },
+    { value: 'parcial', label: 'Parcial' },
+    { value: 'substituido', label: 'Substituido' },
+    { value: 'perdido', label: 'Perdido' },
+  ];
+}
+
+function selectOptions(values, selected) {
+  return values.map((value) => `<option value="${escapeAttr(value)}" ${value === selected ? 'selected' : ''}>${escapeHtml(capitalize(value))}</option>`).join('');
+}
+
+function statusLabel(status) {
+  const labels = {
+    finalizado: 'Treino feito',
+    parcial: 'Treino parcial',
+    substituido: 'Treino substituido',
+    perdido: 'Treino perdido',
+    pendente: 'Pendente',
+  };
+  return labels[normalizeWorkoutStatus(status)] ?? 'Pendente';
+}
+
 function isValidPace(value) {
   const match = String(value ?? '').match(/^(\d{1,2}):(\d{2})$/);
   return Boolean(match && Number(match[2]) < 60);
 }
 
+function isValidDuration(value) {
+  return parseDurationToSeconds(value) !== null;
+}
+
 function normalizePaceInput(value) {
   const masked = maskPace(value);
   return isValidPace(masked) ? masked : value.trim();
+}
+
+function normalizeDurationInput(value) {
+  return maskDuration(value).trim();
 }
 
 function maskPace(value) {
@@ -1201,10 +1671,77 @@ function maskPace(value) {
   return `${Number(digits.slice(0, -2))}:${digits.slice(-2)}`;
 }
 
+function maskDuration(value) {
+  const raw = String(value ?? '').trim();
+  if (raw.includes(':')) return raw.replace(/[^\d:]/g, '').replace(/:{2,}/g, ':').slice(0, 8);
+  const digits = raw.replace(/\D/g, '').slice(0, 6);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${Number(digits.slice(0, -2))}:${digits.slice(-2)}`;
+  return `${Number(digits.slice(0, -4))}:${digits.slice(-4, -2)}:${digits.slice(-2)}`;
+}
+
+function parseDurationToSeconds(value) {
+  const parts = String(value ?? '').split(':').map(Number);
+  if (![2, 3].includes(parts.length) || parts.some((part) => !Number.isFinite(part))) return null;
+  const [hours, minutes, seconds] = parts.length === 3 ? parts : [0, parts[0], parts[1]];
+  if (minutes >= 60 || seconds >= 60 || hours < 0 || minutes < 0 || seconds < 0) return null;
+  const total = hours * 3600 + minutes * 60 + seconds;
+  return total > 0 ? total : null;
+}
+
+function updateAutoPace(form) {
+  if (!form) return;
+  const distance = Number(form.querySelector('[name="distance"]')?.value);
+  const duration = parseDurationToSeconds(form.querySelector('[name="duration"]')?.value);
+  const paceField = form.querySelector('[name="pace"]');
+  if (!paceField || !Number.isFinite(distance) || distance <= 0 || !duration) return;
+  paceField.value = formatPace(Math.round(duration / distance));
+}
+
 function parsePaceToSeconds(value) {
   const match = String(value ?? '').match(/(\d{1,2}):(\d{2})/);
   if (!match || Number(match[2]) >= 60) return null;
   return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function performanceSentence(workout, execution) {
+  if (execution.status === 'perdido') return 'Treino perdido registrado. O melhor ajuste e seguir o calendario sem tentar compensar tudo de uma vez.';
+  if (execution.status === 'substituido') return 'Treino substituido registrado. Mantem aderencia, mas nao substitui totalmente o estimulo especifico planejado.';
+
+  const plannedKm = Number(workout.distanceKm || 0);
+  const realKm = Number(execution.distance || 0);
+  const targetPace = parsePaceToSeconds(firstPace(workout.paceTarget));
+  const realPace = parsePaceToSeconds(execution.pace);
+  const kmRatio = plannedKm ? realKm / plannedKm : 1;
+  const paceDelta = targetPace && realPace ? realPace - targetPace : 0;
+  const rpe = Number(execution.rpe || 0);
+  const pain = execution.pain;
+
+  if (execution.status === 'parcial') {
+    return `Parcial bem registrado: voce fez ${Math.round(kmRatio * 100)}% do volume planejado. Preserve a recuperacao e volte ao plano no proximo treino.`;
+  }
+
+  if (pain === 'moderada' || pain === 'forte') {
+    return 'Treino concluido, mas a dor merece atencao. Se ela repetir ou alterar a passada, reduza o proximo estimulo.';
+  }
+
+  if (kmRatio >= 0.95 && paceDelta <= 0 && rpe <= 7) {
+    return 'Excelente execucao: volume completo, pace dentro ou melhor que o alvo e esforco controlado.';
+  }
+
+  if (kmRatio >= 0.9 && Math.abs(paceDelta) <= 15 && rpe <= 8) {
+    return 'Boa execucao: voce ficou muito perto do planejado e manteve o treino no caminho da meta.';
+  }
+
+  if (paceDelta > 25 || rpe >= 9) {
+    return 'Execucao pesada: o registro sugere fadiga ou ritmo acima do custo ideal. Priorize recuperar antes de intensificar.';
+  }
+
+  if (kmRatio < 0.8) {
+    return 'Volume abaixo do planejado. Conta como treino, mas vale observar energia, agenda e recuperacao.';
+  }
+
+  return 'Treino registrado dentro de uma faixa util para a preparacao. A consistencia aqui vale muito.';
 }
 
 function formatPace(seconds) {
@@ -1290,7 +1827,7 @@ function exportJson() {
   const payload = {
     exportedAt: new Date().toISOString(),
     schemaVersion: state.schemaVersion,
-    workouts: finishedWorkouts().map((workout) => ({
+    workouts: recordedWorkouts().map((workout) => ({
       id: workout.id,
       week: workout.weekNumber,
       order: workout.order,
@@ -1299,8 +1836,14 @@ function exportJson() {
       title: workout.type,
       status: workout.status,
       km_real: Number(workout.execution.km_real || 0),
+      tempo_real: workout.execution.tempo_real ?? '',
       pace_real: workout.execution.pace_real,
       rpe: Number(workout.execution.rpe),
+      dor: workout.execution.dor ?? '',
+      sono: workout.execution.sono ?? '',
+      clima: workout.execution.clima ?? '',
+      substituicao: workout.execution.substituicao ?? '',
+      desempenho: workout.execution.desempenho ?? '',
       comentario: workout.execution.comentario ?? '',
     })),
   };
@@ -1482,6 +2025,11 @@ function round(value) {
 
 function pad2(value) {
   return String(value).padStart(2, '0');
+}
+
+function capitalize(value) {
+  const text = String(value ?? '');
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : '';
 }
 
 function clamp(value, min, max) {

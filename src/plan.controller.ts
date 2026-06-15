@@ -1,7 +1,7 @@
-import { Body, Controller, Get, Headers, Put } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, Headers, Post, Put } from '@nestjs/common';
 import { PlanService } from './plan.service';
 import { SupabaseService } from './supabase.service';
-import { TrainingPlan } from './types';
+import { CoachWorkoutInput, TrainingPlan } from './types';
 
 @Controller('api')
 export class PlanController {
@@ -30,6 +30,11 @@ export class PlanController {
     return this.supabaseService.publicConfig();
   }
 
+  @Get('me')
+  getMe(@Headers('authorization') authorization?: string) {
+    return this.supabaseService.requireUser(authorization);
+  }
+
   @Get('user-plan')
   getUserPlan(@Headers('authorization') authorization?: string) {
     return this.supabaseService.getUserPlan(authorization);
@@ -41,5 +46,41 @@ export class PlanController {
     @Body() plan: TrainingPlan,
   ) {
     return this.supabaseService.saveUserPlan(authorization, plan);
+  }
+
+  @Post('coach/workouts')
+  async addCoachWorkout(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() input: CoachWorkoutInput,
+  ) {
+    const coach = await this.supabaseService.requireUser(authorization);
+    if (coach.role !== 'coach') {
+      throw new ForbiddenException('Apenas coaches podem criar treinos para atletas.');
+    }
+
+    const athlete = await this.supabaseService.findUserByHandle(input.athlete);
+    if (!athlete) {
+      throw new BadRequestException('Atleta nao encontrado. Use username ou email cadastrado.');
+    }
+
+    try {
+      const stored = await this.supabaseService.getUserPlanByUserId(athlete.id);
+      const basePlan = stored?.plan?.weeks?.length
+        ? stored.plan
+        : this.planService.getPlanForUser(athlete);
+      const plan = this.planService.addCoachWorkout(basePlan, athlete, coach, input);
+      await this.supabaseService.saveUserPlanByUserId(athlete.id, plan);
+      return {
+        saved: true,
+        athlete: {
+          id: athlete.id,
+          username: athlete.username,
+          email: athlete.email,
+          displayName: athlete.displayName,
+        },
+      };
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : 'Nao foi possivel criar treino.');
+    }
   }
 }

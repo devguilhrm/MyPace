@@ -45,6 +45,19 @@ export interface WorkoutAuthor {
   name: string;
 }
 
+export interface CoachWorkoutInput {
+  athlete: string;
+  date: string;
+  type: string;
+  distanceKm: number;
+  distanceLabel?: string;
+  paceTarget?: string;
+  zone?: Workout['zone'];
+  effort?: number;
+  notes: string;
+  guidance?: string;
+}
+
 export interface WorkoutExecution {
   done: boolean;
   status?: WorkoutStatus;

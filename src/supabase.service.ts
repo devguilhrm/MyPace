@@ -21,6 +21,10 @@ export interface StoredPlanRow {
   updated_at: string;
 }
 
+interface SupabaseAdminUsersResponse {
+  users?: SupabaseUserResponse[];
+}
+
 @Injectable()
 export class SupabaseService {
   private readonly url = process.env.SUPABASE_URL ?? '';
@@ -44,8 +48,16 @@ export class SupabaseService {
       return null;
     }
 
+    return this.getUserPlanByUserId(user.id);
+  }
+
+  async getUserPlanByUserId(userId: string) {
+    if (!this.isPersistenceReady()) {
+      return null;
+    }
+
     const response = await fetch(
-      `${this.url}/rest/v1/training_plans?user_id=eq.${encodeURIComponent(user.id)}&select=plan,updated_at&limit=1`,
+      `${this.url}/rest/v1/training_plans?user_id=eq.${encodeURIComponent(userId)}&select=plan,updated_at&limit=1`,
       {
         headers: this.serviceHeaders(),
       },
@@ -66,6 +78,14 @@ export class SupabaseService {
       return { saved: false, reason: 'supabase_not_configured' };
     }
 
+    return this.saveUserPlanByUserId(user.id, plan);
+  }
+
+  async saveUserPlanByUserId(userId: string, plan: TrainingPlan) {
+    if (!this.isPersistenceReady()) {
+      return { saved: false, reason: 'supabase_not_configured' };
+    }
+
     const response = await fetch(`${this.url}/rest/v1/training_plans?on_conflict=user_id`, {
       method: 'POST',
       headers: {
@@ -74,7 +94,7 @@ export class SupabaseService {
         prefer: 'resolution=merge-duplicates,return=minimal',
       },
       body: JSON.stringify({
-        user_id: user.id,
+        user_id: userId,
         plan,
         updated_at: new Date().toISOString(),
       }),
@@ -85,6 +105,40 @@ export class SupabaseService {
     }
 
     return { saved: true };
+  }
+
+  async findUserByHandle(handle: string): Promise<AppUserIdentity | null> {
+    if (!this.isPersistenceReady()) {
+      return null;
+    }
+
+    const normalized = handle.trim().toLowerCase();
+    if (!normalized) return null;
+
+    const response = await fetch(`${this.url}/auth/v1/admin/users?per_page=1000`, {
+      headers: this.serviceHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Supabase user lookup failed: ${response.status}`);
+    }
+
+    const payload = (await response.json()) as SupabaseAdminUsersResponse | SupabaseUserResponse[];
+    const users = Array.isArray(payload) ? payload : payload.users ?? [];
+    const user = users.find((item) => {
+      const email = item.email?.toLowerCase() ?? '';
+      const username = item.user_metadata?.username?.toLowerCase() ?? '';
+      return email === normalized || username === normalized;
+    });
+
+    if (!user?.id) return null;
+    return {
+      id: user.id,
+      email: user.email ?? '',
+      username: user.user_metadata?.username ?? '',
+      displayName: user.user_metadata?.display_name ?? '',
+      role: this.resolveRole(user),
+    };
   }
 
   async identifyUser(authorization: string | undefined) {

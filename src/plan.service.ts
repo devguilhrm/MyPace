@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   AppUserIdentity,
+  CoachWorkoutInput,
   TrainingPhase,
   TrainingPlan,
   TrainingWeek,
@@ -113,6 +114,67 @@ export class PlanService {
         },
       ],
       weeks: this.buildWeeks('2026-06-15', this.templates(), true),
+    };
+  }
+
+  addCoachWorkout(plan: TrainingPlan, athlete: AppUserIdentity, coach: AppUserIdentity, input: CoachWorkoutInput): TrainingPlan {
+    const date = this.parseDate(input.date);
+    if (Number.isNaN(date.getTime())) {
+      throw new Error('Data do treino invalida.');
+    }
+
+    const weekIndex = this.weekIndexForDate(plan, input.date);
+    const targetWeek = plan.weeks[weekIndex];
+    if (!targetWeek) {
+      throw new Error('Plano sem semana disponivel para receber treino.');
+    }
+
+    const distanceKm = Number(input.distanceKm || 0);
+    if (!Number.isFinite(distanceKm) || distanceKm <= 0) {
+      throw new Error('Distancia do treino precisa ser maior que zero.');
+    }
+
+    const order = targetWeek.workouts.length + 1;
+    const workout: Workout = {
+      id: `coach-${coach.id}-${Date.now()}`,
+      source: 'coach',
+      createdBy: {
+        id: coach.id,
+        role: 'coach',
+        name: coach.displayName || coach.username || coach.email || 'Coach',
+      },
+      assignedToUserId: athlete.id,
+      week: targetWeek.week,
+      order,
+      date: input.date,
+      day: this.weekday(date),
+      type: input.type.trim() || 'Corrida personalizada',
+      status: 'pendente',
+      distanceKm,
+      distanceLabel: input.distanceLabel?.trim() || `${distanceKm} km`,
+      paceTarget: input.paceTarget?.trim() || 'solto',
+      zone: input.zone || 'Z2',
+      durationMinutes: Math.max(10, Math.round((distanceKm * 420) / 60)),
+      effort: input.effort ?? 4,
+      notes: input.notes.trim(),
+      guidance: input.guidance?.trim() || 'Treino criado pelo coach.',
+      execution: {
+        done: false,
+      },
+    };
+
+    const weeks = plan.weeks.map((week, index) => {
+      if (index !== weekIndex) return week;
+      const workouts = [...week.workouts, workout].sort((a, b) => a.date.localeCompare(b.date) || a.order - b.order);
+      return {
+        ...week,
+        workouts: workouts.map((item, itemIndex) => ({ ...item, order: itemIndex + 1 })),
+      };
+    });
+
+    return {
+      ...plan,
+      weeks,
     };
   }
 
@@ -546,6 +608,14 @@ export class PlanService {
         })),
       })),
     };
+  }
+
+  private weekIndexForDate(plan: TrainingPlan, date: string): number {
+    const index = plan.weeks.findIndex((week, weekIndex) => {
+      const next = plan.weeks[weekIndex + 1]?.startsAt;
+      return date >= week.startsAt && (!next || date < next);
+    });
+    return index >= 0 ? index : Math.max(0, plan.weeks.length - 1);
   }
 
   private subTwoWorkout(week: number, planned: PlannedWorkout): PlannedWorkout {

@@ -106,21 +106,27 @@ async function signIn(event) {
     return;
   }
 
-  setAuthMessage('Entrando...');
-  const { data, error } = await supabaseClient.auth.signInWithPassword({
-    email: normalizeLogin(loginId),
-    password,
-  });
+  try {
+    setAuthMessage('Entrando...');
+    const { data, error } = await supabaseClient.auth.signInWithPassword({
+      email: normalizeLogin(loginId),
+      password,
+    });
 
-  if (error) {
-    setAuthMessage('Usuario ou senha invalidos.');
-    return;
+    if (error) {
+      setAuthMessage('Usuario ou senha invalidos.');
+      return;
+    }
+
+    session = data.session;
+    localMode = false;
+    setAuthMessage('Carregando plano...');
+    await startApp();
+    setAuthMessage('');
+  } catch (error) {
+    console.error(error);
+    setAuthMessage('Login feito, mas nao foi possivel carregar o plano. Tente atualizar a pagina.');
   }
-
-  session = data.session;
-  localMode = false;
-  setAuthMessage('');
-  await startApp();
 }
 
 async function logout() {
@@ -147,7 +153,8 @@ async function loadPlan() {
     try {
       const response = await fetch('/api/user-plan', { headers: authHeaders() });
       if (response.ok) {
-        const row = await response.json();
+        const text = await response.text();
+        const row = text ? JSON.parse(text) : null;
         if (row?.plan?.schemaVersion === PLAN_VERSION) {
           localStorage.setItem(storageKey(), JSON.stringify(row.plan));
           return row.plan;

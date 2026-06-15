@@ -44,7 +44,7 @@ export class SupabaseService {
     }
 
     const rows = (await response.json()) as StoredPlanRow[];
-    return rows[0] ?? null;
+    return rows[0] ?? { plan: null, updated_at: null };
   }
 
   async saveUserPlan(authorization: string | undefined, plan: TrainingPlan) {

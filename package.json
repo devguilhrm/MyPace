@@ -10,6 +10,7 @@
     "build": "tsc -p tsconfig.json",
     "dev": "npm run build && node dist/src/main.js",
     "seed:user": "node scripts/create-guilherme-user.mjs",
+    "seed:felipe": "node scripts/create-felipe-user.mjs",
     "start": "node dist/src/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "vercel-build": "npm run build"

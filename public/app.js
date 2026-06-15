@@ -217,7 +217,9 @@ async function loadSavedPlan() {
 }
 
 function readLocalPlan() {
-  const keys = [storageKey(), STORAGE_KEY, ...knownPlanKeys()];
+  const keys = session && !localMode
+    ? [storageKey()]
+    : [storageKey(), STORAGE_KEY, ...knownPlanKeys()];
   for (const key of [...new Set(keys)]) {
     try {
       const parsed = JSON.parse(localStorage.getItem(key) ?? 'null');
@@ -242,7 +244,8 @@ async function migrateSavedPlan(saved) {
 }
 
 async function fetchInitialPlan() {
-  const response = await fetch('/api/plan');
+  const options = session && !localMode ? { headers: authHeaders() } : undefined;
+  const response = await fetch('/api/plan', options);
   if (!response.ok) throw new Error('Falha ao carregar plano inicial');
   return response.json();
 }
@@ -1179,7 +1182,7 @@ function paceChart(items) {
   const max = Math.max(...paces);
   const range = Math.max(1, max - min);
   const ticks = Array.from({ length: 5 }, (_, index) => formatPace(Math.round(min + (range / 4) * index))).reverse();
-  const goal = parsePaceToSeconds(settings.paceGoal) ?? 341;
+  const goal = targetGoalPaceSeconds();
 
   return `
     <div class="pace-chart">
@@ -1235,19 +1238,21 @@ function alertsCard(alerts) {
 function projectionCard(summary) {
   const projection = summary.probablePr;
   const pace = summary.projectionSeconds ? `${formatPace(summary.projectionSeconds)}/km` : '-';
-  const goal = parsePaceToSeconds(settings.paceGoal) ?? 341;
+  const distance = targetDistanceKm();
+  const goal = targetGoalPaceSeconds();
   const delta = summary.projectionSeconds ? summary.projectionSeconds - goal : null;
+  const title = distance >= 20 ? 'Meia maratona provavel' : `${formatDistanceLabel(distance)} provavel`;
   const message = delta === null
-    ? 'Registre alguns treinos com pace para projetar a meia.'
+    ? 'Registre alguns treinos com pace para projetar o alvo.'
     : delta <= 0
-      ? 'A tendencia atual conversa com a meta sub-2h.'
-      : `A tendencia esta ${Math.round(delta)}s/km acima da meta. Ajuste carga, recuperacao e consistencia antes de forcar ritmo.`;
+      ? 'A tendencia atual conversa com a meta do plano.'
+      : `A tendencia esta ${Math.round(delta)}s/km acima da referencia. Ajuste carga, recuperacao e consistencia antes de forcar ritmo.`;
 
   return `
     <article class="feature-card projection-card">
       <div>
         <p class="eyebrow">Projecao</p>
-        <h2>Meia maratona provavel</h2>
+        <h2>${escapeHtml(title)}</h2>
       </div>
       <div class="projection-main">
         <strong>${escapeHtml(projection)}</strong>
@@ -1303,7 +1308,7 @@ function trainingAlerts(finished, recorded) {
   const highRpe = recentRecorded.filter((workout) => Number(workout.execution.rpe) >= 8).length;
   const pain = recentRecorded.filter((workout) => ['moderada', 'forte'].includes(workout.execution.dor)).length;
   const lost = recentRecorded.filter((workout) => workout.status === 'perdido').length;
-  const goal = parsePaceToSeconds(settings.paceGoal) ?? 341;
+  const goal = targetGoalPaceSeconds();
   const recentPace = finished.slice(-4);
   const avgRecentPace = recentPace.length
     ? Math.round(recentPace.reduce((sum, workout) => sum + workout.paceSeconds, 0) / recentPace.length)
@@ -1312,7 +1317,7 @@ function trainingAlerts(finished, recorded) {
   if (highRpe >= 2) alerts.push({ level: 'danger', icon: 'activity', message: 'RPE alto em pelo menos 2 registros recentes. Reduza intensidade se isso vier com sono ruim ou dor.' });
   if (pain >= 1) alerts.push({ level: 'danger', icon: 'circle-alert', message: 'Dor moderada/forte apareceu nos registros recentes. Evite qualidade ate correr sem alterar passada.' });
   if (lost >= 2) alerts.push({ level: 'warn', icon: 'calendar-x', message: 'Dois treinos recentes foram perdidos. Mantenha o calendario e nao tente compensar volume de uma vez.' });
-  if (avgRecentPace && avgRecentPace > goal + 25) alerts.push({ level: 'warn', icon: 'target', message: 'Pace recente ainda esta acima da faixa sub-2h. A meta pode precisar de ajuste se isso persistir nos checkpoints.' });
+  if (avgRecentPace && avgRecentPace > goal + 25) alerts.push({ level: 'warn', icon: 'target', message: 'Pace recente ainda esta acima da referencia do plano. A meta pode precisar de ajuste se isso persistir nos checkpoints.' });
   if (!alerts.length) alerts.push({ level: 'good', icon: 'check-circle-2', message: 'Sem alerta relevante pelos registros recentes. Continue priorizando consistencia e recuperacao.' });
   return alerts;
 }
@@ -1484,8 +1489,8 @@ function reportSummary(items, recorded = recordedWorkouts()) {
     averagePace: avgPace ? `${formatPace(avgPace)}/km` : '-',
     totalKm: `${round(totalKm)} km`,
     bestPace: bestPace ? `${formatPace(bestPace)}/km` : '-',
-    probablePr: bestPace ? estimateHalfMarathonTime(projectedHalfPace(items)) : '-',
-    projectionSeconds: bestPace ? projectedHalfPace(items) : null,
+    probablePr: bestPace ? estimateDistanceTime(projectedRacePace(items), targetDistanceKm()) : '-',
+    projectionSeconds: bestPace ? projectedRacePace(items) : null,
     load: classifyWeekLoad(items.at(-1)?.weekNumber),
     workoutsDone: `${recorded.length}/${allRunWorkouts().length}`,
     consistency: `${adherence}%`,
@@ -1520,7 +1525,7 @@ function weeklyStats(recorded) {
   });
 }
 
-function projectedHalfPace(items) {
+function projectedRacePace(items) {
   const recent = items.slice(-6);
   const weighted = recent.reduce((sum, item, index) => sum + item.paceSeconds * (index + 1), 0);
   const weights = recent.reduce((sum, _item, index) => sum + index + 1, 0);
@@ -1538,11 +1543,28 @@ function classifyWeekLoad(weekNumber) {
   return 'alta';
 }
 
-function estimateHalfMarathonTime(secondsPerKm) {
-  const totalSeconds = Math.round(secondsPerKm * 21.1);
+function estimateDistanceTime(secondsPerKm, distanceKm) {
+  const totalSeconds = Math.round(secondsPerKm * distanceKm);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours <= 0) return `${minutes}:${String(seconds).padStart(2, '0')}`;
   return `${hours}h${String(minutes).padStart(2, '0')}`;
+}
+
+function targetDistanceKm() {
+  return Number(state?.planMeta?.targetRaceDistanceKm || 21.1);
+}
+
+function targetGoalPaceSeconds() {
+  const defaultGoal = targetDistanceKm() >= 20 ? 341 : 536;
+  const parsed = parsePaceToSeconds(settings.paceGoal);
+  if (targetDistanceKm() < 10 && settings.paceGoal === '5:41') return defaultGoal;
+  return parsed ?? defaultGoal;
+}
+
+function formatDistanceLabel(distanceKm) {
+  return Number.isInteger(distanceKm) ? `${distanceKm} km` : `${String(distanceKm).replace('.', ',')} km`;
 }
 
 function normalizePlanState() {

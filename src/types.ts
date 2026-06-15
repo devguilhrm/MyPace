@@ -1,7 +1,13 @@
 export type TrainingPhase =
   | 'retorno'
+  | 'adaptacao'
+  | 'base inicial'
+  | 'base continua'
   | 'base forte'
   | 'construcao'
+  | 'resistencia'
+  | 'consolidacao'
+  | 'finalizacao'
   | 'especifica'
   | 'tapering';
 

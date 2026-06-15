@@ -20,8 +20,9 @@ export class PlanController {
   }
 
   @Get('plan')
-  getPlan() {
-    return this.planService.getInitialPlan();
+  async getPlan(@Headers('authorization') authorization?: string) {
+    const user = await this.supabaseService.identifyUser(authorization);
+    return this.planService.getPlanForUser(user);
   }
 
   @Get('config')

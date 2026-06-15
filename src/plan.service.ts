@@ -30,8 +30,19 @@ interface WeekTemplate {
 
 const MS_PER_DAY = 86_400_000;
 
+interface AthleteIdentity {
+  email?: string;
+  username?: string;
+  displayName?: string;
+}
+
 @Injectable()
 export class PlanService {
+  getPlanForUser(user: AthleteIdentity | null): TrainingPlan {
+    if (this.isFelipe(user)) return this.getFelipePlan();
+    return this.getInitialPlan();
+  }
+
   getInitialPlan(): TrainingPlan {
     return {
       schemaVersion: '6.2.0',
@@ -97,14 +108,65 @@ export class PlanService {
           purpose: 'Reduzir fadiga, manter coordenacao e chegar descansado.',
         },
       ],
-      weeks: this.buildWeeks(),
+      weeks: this.buildWeeks('2026-06-15', this.templates(), true),
     };
   }
 
-  private buildWeeks(): TrainingWeek[] {
-    const start = this.parseDate('2026-06-15');
+  private getFelipePlan(): TrainingPlan {
+    return {
+      schemaVersion: '6.2.0-felipe.1',
+      planMeta: {
+        generatedAt: new Date().toISOString(),
+        startDate: '2026-06-19',
+        weeks: 28,
+        targetRaceDistanceKm: 5,
+        warning: 'Plano de retorno para Felipe: foco em folego, perda de peso, consistencia e evolucao gradual ate dezembro.',
+        methodology: [
+          'Plano adaptado do arquivo periodizacao_felipe_ate_dezembro.md.',
+          'Disponibilidade principal: sexta, sabado e domingo.',
+          'Objetivo: melhorar condicionamento, aumentar tempo em movimento e apoiar perda de peso.',
+          'RPE manda mais que pace; terminar com reserva vale mais que acelerar.',
+          'Sabado funciona como ponte leve: caminhada, forca, mobilidade ou descanso ativo.',
+        ],
+        references: [
+          'periodizacao_felipe_ate_dezembro.md',
+          'Data-base: 15/06/2026. Periodo: 19/06/2026 a 27/12/2026.',
+        ],
+        paceZones: [
+          { name: 'Muito leve', rpe: '2-3', pace: 'caminhada ou trote solto' },
+          { name: 'Leve', rpe: '3-4', pace: '8:50-10:00/km' },
+          { name: 'Moderado', rpe: '5-6', pace: '8:10-8:45/km' },
+          { name: 'Caminhada forte', rpe: '3-4', pace: '10:30-12:30/km' },
+        ],
+        raceScenarios: [
+          { name: 'Marco 1', pace: 'livre', time: '3 km continuo confortavel' },
+          { name: 'Marco 2', pace: 'controlado', time: '5 km continuo confortavel' },
+          { name: 'Fechamento', pace: 'leve', time: '8-12 km se estiver adaptado' },
+        ],
+      },
+      phases: [
+        { name: 'adaptacao', weeks: '1-4', purpose: 'Acostumar o corpo ao impacto e criar rotina.' },
+        { name: 'base inicial', weeks: '5-8', purpose: 'Aumentar tempo em movimento sem sofrimento extremo.' },
+        { name: 'base continua', weeks: '9-12', purpose: 'Buscar corrida continua confortavel.' },
+        { name: 'construcao', weeks: '13-16', purpose: 'Melhorar resistencia e tolerar treinos mais longos.' },
+        { name: 'resistencia', weeks: '17-20', purpose: 'Chegar aos 5 km continuos com controle.' },
+        { name: 'consolidacao', weeks: '21-24', purpose: 'Sustentar maior volume semanal com seguranca.' },
+        { name: 'finalizacao', weeks: '25-28', purpose: 'Fechar o ano com autonomia entre 5 e 8 km, podendo chegar a 10-12 km.' },
+      ],
+      weeks: this.buildWeeks('2026-06-19', this.felipeTemplates(), false),
+    };
+  }
 
-    return this.templates().map((template, index) => {
+  private isFelipe(user: AthleteIdentity | null) {
+    const email = user?.email?.toLowerCase() ?? '';
+    const username = user?.username?.toLowerCase() ?? '';
+    return username === 'felipe' || email === 'felipe@run.local' || email.startsWith('felipe@');
+  }
+
+  private buildWeeks(startDate: string, templates: WeekTemplate[], adaptSubTwo: boolean): TrainingWeek[] {
+    const start = this.parseDate(startDate);
+
+    return templates.map((template, index) => {
       const weekStart = new Date(start.getTime() + index * 7 * MS_PER_DAY);
 
       return {
@@ -117,7 +179,7 @@ export class PlanService {
         longRunLabel: template.longRunLabel,
         keyWorkout: template.keyWorkout,
         workouts: template.workouts.map((workout, workoutIndex) =>
-          this.workout(index + 1, workoutIndex + 1, weekStart, workout),
+          this.workout(index + 1, workoutIndex + 1, weekStart, workout, adaptSubTwo),
         ),
       };
     });
@@ -249,6 +311,151 @@ export class PlanService {
     ];
   }
 
+  private felipeTemplates(): WeekTemplate[] {
+    return [
+      this.week('adaptacao', 'Adaptacao: corrida/caminhada leve', 4, '4 km', '2 km', '1 min correndo + 2 min caminhando', [
+        this.run(0, 'Corrida facil (Z2)', 2, '2 km', '8:50-10:00/km', 3, 'Caminhada/corrida leve: 1 min correndo + 2 min caminhando.', 'Completar com folga. Se faltar ar, use 1 min correndo + 3 min caminhando.'),
+        this.run(1, 'Cross-training', 2, '20-30 min caminhada', '10:30-12:30/km', 2, 'Caminhada leve + mobilidade.', 'Movimento leve para aumentar gasto calorico sem pesar o impacto.'),
+        this.run(2, 'Corrida facil (Z2)', 2, '2 km', '8:50-10:00/km', 3, 'Corrida leve, sem forcar pace.', 'Terminar com a sensacao de que conseguiria fazer um pouco mais.'),
+      ]),
+      this.week('adaptacao', 'Adaptacao: repetir com mais volume', 5, '5 km', '2,5 km', '1 min corrida + 2 min caminhada', [
+        this.run(0, 'Corrida facil (Z2)', 2.5, '2,5 km', '8:50-10:00/km', 3, '1 min corrida + 2 min caminhada.', 'Ritmo confortavel, respiracao sob controle.'),
+        this.run(1, 'Cross-training', 2, '20-30 min caminhada + forca', '10:30-12:30/km', 3, 'Caminhada e forca basica.', 'Forca com amplitude segura: agachamento, panturrilha, ponte, prancha e core.'),
+        this.run(2, 'Corrida facil (Z2)', 2.5, '2,5 km', '8:50-10:00/km', 3, 'Corrida leve.', 'Nao transformar domingo em teste.'),
+      ]),
+      this.week('adaptacao', 'Adaptacao: reduzir caminhadas', 6, '6 km', '3 km', '1 min corrida + 90s caminhada', [
+        this.run(0, 'Corrida facil (Z2)', 3, '3 km', '8:50-10:00/km', 4, '1 min corrida + 90s caminhada.', 'Se ficar pesado, volte para 2 min caminhando.'),
+        this.run(1, 'Cross-training', 2.5, '25-35 min caminhada', '10:30-12:30/km', 2, 'Caminhada leve.', 'Manter leve; sabado nao e treino forte.'),
+        this.run(2, 'Corrida facil (Z2)', 3, '3 km', '8:50-10:00/km', 3, 'Corrida leve.', 'Terminar inteiro e sem dor.'),
+      ]),
+      this.week('adaptacao', 'Alivio: absorver impacto', 4.5, '4,5 km', '2,5 km', 'Semana leve', [
+        this.run(0, 'Corrida facil (Z2)', 2, '2 km', '8:50-10:00/km', 3, 'Corrida leve.', 'Semana de alivio; nao compensar treino perdido.'),
+        this.run(1, 'Mobilidade', 1, 'mobilidade + caminhada curta', 'livre', 2, 'Mobilidade e caminhada curta.', 'Soltar o corpo e observar sinais de dor.'),
+        this.run(2, 'Corrida facil (Z2)', 2.5, '2,5 km', '8:50-10:00/km', 3, 'Corrida leve.', 'Finalizar com reserva clara.'),
+      ]),
+      this.week('base inicial', 'Base inicial: mais tempo correndo', 6.5, '6,5 km', '3,5 km', 'Corrida facil', [
+        this.run(0, 'Corrida facil (Z2)', 3, '3 km', '8:50-10:00/km', 3, 'Corrida facil.', 'Conforto acima do pace.'),
+        this.run(1, 'Cross-training', 2.5, '30 min caminhada + forca', '10:30-12:30/km', 3, 'Caminhada + forca.', 'Forca basica, sem buscar exaustao.'),
+        this.run(2, 'Corrida longa', 3.5, '3,5 km', '8:50-10:00/km', 3, 'Longo leve da semana.', 'Ritmo leve e sustentavel.'),
+      ]),
+      this.week('base inicial', 'Base inicial: aceleracoes curtas', 7, '7 km', '4 km', '4 aceleracoes de 15s', [
+        this.run(0, 'Strides', 3, '3 km + 4x15s', '8:50-10:00/km + solto', 4, 'Corrida facil + 4 aceleracoes de 15s.', 'Aceleracoes soltas, sem sprint.'),
+        this.run(1, 'Cross-training', 2.5, '30 min caminhada leve', '10:30-12:30/km', 2, 'Caminhada leve.', 'Sair melhor do que entrou.'),
+        this.run(2, 'Corrida longa', 4, '4 km', '8:50-10:00/km', 3, 'Longo leve.', 'Controle a respiracao do inicio ao fim.'),
+      ]),
+      this.week('base inicial', 'Base inicial: consolidar 4,5 km', 8, '8 km', '4,5 km', 'Domingo leve maior', [
+        this.run(0, 'Corrida facil (Z2)', 3.5, '3,5 km', '8:50-10:00/km', 3, 'Corrida facil.', 'Sem pressa; manter conversa possivel.'),
+        this.run(1, 'Cross-training', 2, 'forca + caminhada 20 min', '10:30-12:30/km', 3, 'Forca + caminhada curta.', 'Use carga leve e boa tecnica.'),
+        this.run(2, 'Corrida longa', 4.5, '4,5 km', '8:50-10:00/km', 3, 'Longo leve.', 'Se houver dor, reduza para 4 km.'),
+      ]),
+      this.week('base inicial', 'Alivio: fechar fase inteiro', 6.5, '6,5 km', '3,5 km', 'Semana leve', [
+        this.run(0, 'Corrida facil (Z2)', 3, '3 km', '8:50-10:00/km', 3, 'Corrida leve.', 'Treino de manutencao.'),
+        this.run(1, 'Mobilidade', 0, 'mobilidade', 'solto', 1, 'Mobilidade.', 'Descanso ativo sem impacto.'),
+        this.run(2, 'Corrida longa', 3.5, '3,5 km', '8:50-10:00/km', 3, 'Longo leve reduzido.', 'Chegar descansado para a proxima fase.'),
+      ]),
+      this.week('base continua', 'Base continua: primeiro 5 km leve', 9, '9 km', '5 km', '5 km leve', [
+        this.run(0, 'Corrida facil (Z2)', 4, '4 km', '8:50-10:00/km', 3, 'Corrida facil.', 'Controle de respiracao.'),
+        this.run(1, 'Cross-training', 3, '35 min caminhada forte ou bike leve', '10:30-12:30/km', 3, 'Caminhada forte ou bike leve.', 'Baixo impacto e gasto calorico.'),
+        this.run(2, 'Corrida longa', 5, '5 km', '8:50-10:00/km', 4, 'Longo leve.', 'Primeiro marco de resistencia, sem acelerar.'),
+      ]),
+      this.week('base continua', 'Base continua: blocos moderados curtos', 9.5, '9,5 km', '5,5 km', '4 x 1 min moderado', [
+        this.run(0, 'Fartlek', 4, '4 km', '4x1min em 8:10-8:45/km', 5, '4 km com 4 x 1 min moderado.', 'Recupere caminhando/trotando leve; folego controlado.'),
+        this.run(1, 'Cross-training', 2, 'forca + caminhada leve', '10:30-12:30/km', 3, 'Forca + caminhada leve.', 'Nao pesar pernas para domingo.'),
+        this.run(2, 'Corrida longa', 5.5, '5,5 km', '8:50-10:00/km', 4, 'Longo leve.', 'Ritmo facil, sem buscar recorde.'),
+      ]),
+      this.week('base continua', 'Base continua: aumentar domingo', 10.5, '10,5 km', '6 km', '6 km leve', [
+        this.run(0, 'Corrida facil (Z2)', 4.5, '4,5 km', '8:50-10:00/km', 3, 'Corrida facil.', 'Respirar bem e terminar inteiro.'),
+        this.run(1, 'Cross-training', 3.5, '35-40 min caminhada', '10:30-12:30/km', 2, 'Caminhada.', 'Leve a moderado, sem virar treino pesado.'),
+        this.run(2, 'Corrida longa', 6, '6 km', '8:50-10:00/km', 4, 'Longo leve.', 'Se o RPE passar de 5, caminhe trechos curtos.'),
+      ]),
+      this.week('base continua', 'Alivio/teste: 3 km continuo', 6, '6 km', '3 km teste', 'Teste 3 km confortavel', [
+        this.run(0, 'Corrida facil (Z2)', 3, '3 km', '8:50-10:00/km', 3, 'Corrida leve.', 'Poupar para o teste.'),
+        this.run(1, 'Mobilidade', 1, 'mobilidade + core', 'solto', 2, 'Mobilidade + core.', 'Core leve e controle de postura.'),
+        this.run(2, 'Teste', 3, '3 km continuos', 'confortavel', 5, 'Teste: 3 km continuos confortavel.', 'Nao e teste de velocidade; e teste de controle.'),
+      ]),
+      this.week('construcao', 'Construcao: retomar volume', 11, '11 km', '6,5 km', '6,5 km leve', [
+        this.run(0, 'Corrida facil (Z2)', 4.5, '4,5 km', '8:50-10:00/km', 3, 'Corrida facil.', 'Foco em constancia.'),
+        this.run(1, 'Cross-training', 2, 'forca + caminhada 25 min', '10:30-12:30/km', 3, 'Forca + caminhada.', 'Forca sem falhar repeticoes.'),
+        this.run(2, 'Corrida longa', 6.5, '6,5 km', '8:50-10:00/km', 4, 'Longo leve.', 'Hidrate e mantenha leve.'),
+      ]),
+      this.week('construcao', 'Construcao: 5 x 1 min moderado', 12, '12 km', '7 km', '5 x 1 min moderado', [
+        this.run(0, 'Fartlek', 5, '5 km', '5x1min em 8:10-8:45/km', 5, '5 km com 5 x 1 min moderado.', 'Moderado e controlado, nunca sprint.'),
+        this.run(1, 'Cross-training', 3, '35 min caminhada leve', '10:30-12:30/km', 2, 'Caminhada leve.', 'Recuperar para domingo.'),
+        this.run(2, 'Corrida longa', 7, '7 km', '8:50-10:00/km', 4, 'Longo leve.', 'Se cansar, use caminhada curta.'),
+      ]),
+      this.week('construcao', 'Construcao: estabilidade', 12.5, '12,5 km', '7,5 km', '7,5 km leve', [
+        this.run(0, 'Corrida facil (Z2)', 5, '5 km', '8:50-10:00/km', 3, 'Corrida facil.', 'Controle e postura.'),
+        this.run(1, 'Mobilidade', 0, 'forca + mobilidade', 'solto', 2, 'Forca + mobilidade.', 'Reduzir impacto no sabado.'),
+        this.run(2, 'Corrida longa', 7.5, '7,5 km', '8:50-10:00/km', 4, 'Longo leve.', 'Nao precisa acelerar no final.'),
+      ]),
+      this.week('construcao', 'Alivio: reduzir fadiga', 9.5, '9,5 km', '5,5 km', 'Semana leve', [
+        this.run(0, 'Corrida facil (Z2)', 4, '4 km', '8:50-10:00/km', 3, 'Corrida leve.', 'Semana de alivio.'),
+        this.run(1, 'Mobilidade', 0, 'caminhada curta ou descanso', 'solto', 1, 'Caminhada curta ou descanso.', 'Escolha descanso se houver fadiga.'),
+        this.run(2, 'Corrida longa', 5.5, '5,5 km', '8:50-10:00/km', 3, 'Longo leve reduzido.', 'Chegar renovado para a resistencia.'),
+      ]),
+      this.week('resistencia', 'Resistencia: domingo de 8 km', 13, '13 km', '8 km', '8 km leve', [
+        this.run(0, 'Corrida facil (Z2)', 5, '5 km', '8:50-10:00/km', 3, 'Corrida facil.', 'Solto e conversavel.'),
+        this.run(1, 'Cross-training', 3.5, '40 min caminhada forte', '10:30-12:30/km', 3, 'Caminhada forte.', 'Forte na caminhada, sem impacto de corrida.'),
+        this.run(2, 'Corrida longa', 8, '8 km', '8:50-10:00/km', 4, 'Longo leve.', 'Marco importante; caminhar curto e permitido se necessario.'),
+      ]),
+      this.week('resistencia', 'Resistencia: firme controlado', 14, '14 km', '8,5 km', '2 x 5 min firme', [
+        this.run(0, 'Tempo run', 5.5, '5,5 km', '2x5min em 8:10-8:45/km', 5, '5,5 km com 2 x 5 min firme controlado.', 'Firme, mas sem perder controle da respiracao.'),
+        this.run(1, 'Cross-training', 2.5, 'forca + caminhada leve', '10:30-12:30/km', 3, 'Forca + caminhada leve.', 'Preservar pernas para domingo.'),
+        this.run(2, 'Corrida longa', 8.5, '8,5 km', '8:50-10:00/km', 4, 'Longo leve.', 'Terminar com reserva.'),
+      ]),
+      this.week('resistencia', 'Resistencia: 9 km leve', 14.5, '14,5 km', '9 km', '9 km leve', [
+        this.run(0, 'Corrida facil (Z2)', 5.5, '5,5 km', '8:50-10:00/km', 3, 'Corrida facil.', 'Leve de verdade.'),
+        this.run(1, 'Cross-training', 3, '35 min caminhada + mobilidade', '10:30-12:30/km', 2, 'Caminhada + mobilidade.', 'Soltar sem cansar.'),
+        this.run(2, 'Corrida longa', 9, '9 km', '8:50-10:00/km', 4, 'Longo leve.', 'Hidratacao e controle.'),
+      ]),
+      this.week('resistencia', 'Alivio/teste: 5 km continuo', 9, '9 km', '5 km teste', 'Teste 5 km confortavel', [
+        this.run(0, 'Corrida facil (Z2)', 4, '4 km', '8:50-10:00/km', 3, 'Corrida leve.', 'Chegar bem ao teste.'),
+        this.run(1, 'Mobilidade', 1, 'mobilidade + core', 'solto', 2, 'Mobilidade + core.', 'Ativar sem cansar.'),
+        this.run(2, 'Teste', 5, '5 km continuos', 'confortavel', 5, 'Teste: 5 km continuos confortavel.', 'Km 1 leve, km 2-3 confortavel, km 4 controle, km 5 aperta so se estiver bem.'),
+      ]),
+      this.week('consolidacao', 'Consolidacao: mais volume semanal', 15.5, '15,5 km', '9,5 km', '9,5 km leve', [
+        this.run(0, 'Corrida facil (Z2)', 6, '6 km', '8:50-10:00/km', 3, 'Corrida facil.', 'Boa postura e controle.'),
+        this.run(1, 'Cross-training', 3.5, '40 min caminhada leve', '10:30-12:30/km', 2, 'Caminhada leve.', 'Baixo impacto.'),
+        this.run(2, 'Corrida longa', 9.5, '9,5 km', '8:50-10:00/km', 4, 'Longo leve.', 'Pode reduzir para 8 km se houver dor.'),
+      ]),
+      this.week('consolidacao', 'Consolidacao: 6 x 1 min moderado', 16, '16 km', '10 km', '6 x 1 min moderado', [
+        this.run(0, 'Fartlek', 6, '6 km', '6x1min em 8:10-8:45/km', 5, '6 km com 6 x 1 min moderado.', 'Recuperar bem entre blocos.'),
+        this.run(1, 'Cross-training', 2, 'forca + caminhada curta', '10:30-12:30/km', 3, 'Forca + caminhada curta.', 'Sem deixar o sabado pesado.'),
+        this.run(2, 'Corrida longa', 10, '10 km', '8:50-10:00/km', 4, 'Longo leve.', 'Marco de resistencia; pace nao e prioridade.'),
+      ]),
+      this.week('consolidacao', 'Consolidacao: sustentar 10,5 km', 16.5, '16,5 km', '10,5 km', '10,5 km leve', [
+        this.run(0, 'Corrida facil (Z2)', 6, '6 km', '8:50-10:00/km', 3, 'Corrida facil.', 'Treino de base.'),
+        this.run(1, 'Cross-training', 3.5, '40 min caminhada forte', '10:30-12:30/km', 3, 'Caminhada forte.', 'Gasto calorico sem impacto alto.'),
+        this.run(2, 'Corrida longa', 10.5, '10,5 km', '8:50-10:00/km', 4, 'Longo leve.', 'Se segunda-feira costuma pesar, reduza.'),
+      ]),
+      this.week('consolidacao', 'Alivio: recuperar', 11.5, '11,5 km', '7 km', 'Semana leve', [
+        this.run(0, 'Corrida facil (Z2)', 4.5, '4,5 km', '8:50-10:00/km', 3, 'Corrida leve.', 'Reduzir fadiga acumulada.'),
+        this.run(1, 'Mobilidade', 0, 'mobilidade ou descanso', 'solto', 1, 'Mobilidade ou descanso.', 'Descanso tambem treina.'),
+        this.run(2, 'Corrida longa', 7, '7 km', '8:50-10:00/km', 3, 'Longo leve reduzido.', 'Fechar novembro inteiro.'),
+      ]),
+      this.week('finalizacao', 'Finalizacao: domingo de 11 km', 17, '17 km', '11 km', '11 km leve', [
+        this.run(0, 'Corrida facil (Z2)', 6, '6 km', '8:50-10:00/km', 3, 'Corrida facil.', 'Ritmo confortavel.'),
+        this.run(1, 'Cross-training', 2.5, 'forca leve + caminhada', '10:30-12:30/km', 2, 'Forca leve + caminhada.', 'Manter sem gerar dor.'),
+        this.run(2, 'Corrida longa', 11, '11 km', '8:50-10:00/km', 4, 'Longo leve.', 'Apenas se estiver sem dor e recuperando bem.'),
+      ]),
+      this.week('finalizacao', 'Finalizacao: progressivo leve', 18.5, '18,5 km', '12 km', '6,5 km progressivo leve', [
+        this.run(0, 'Progressivo', 6.5, '6,5 km', '9:30 -> 8:50/km', 5, 'Progressivo leve.', 'Comecar bem leve e terminar um pouco melhor, sem sprint.'),
+        this.run(1, 'Cross-training', 3, '35 min caminhada', '10:30-12:30/km', 2, 'Caminhada.', 'Recuperacao ativa.'),
+        this.run(2, 'Corrida longa', 12, '12 km', '8:50-10:00/km', 4, 'Longo leve.', 'Opcao maxima do ciclo; reduza para 10 km se estiver pesado.'),
+      ]),
+      this.week('finalizacao', 'Alivio ativo: preservar', 13, '13 km', '8 km', '8 km leve', [
+        this.run(0, 'Corrida facil (Z2)', 5, '5 km', '8:50-10:00/km', 3, 'Corrida leve.', 'Manter consistencia.'),
+        this.run(1, 'Mobilidade', 1, 'mobilidade + caminhada curta', 'solto', 2, 'Mobilidade + caminhada curta.', 'Soltar.'),
+        this.run(2, 'Corrida longa', 8, '8 km', '8:50-10:00/km', 3, 'Longo leve.', 'Semana de alivio ativo.'),
+      ]),
+      this.week('finalizacao', 'Fechamento: teste confortavel', 13, '10-13 km', '5 ou 8 km teste', 'Teste final confortavel', [
+        this.run(0, 'Corrida facil (Z2)', 5, '5 km', '8:50-10:00/km', 3, '5 km leve ou caminhada se houver viagem/festa.', 'Flexivel: manter movimento sem culpa.'),
+        this.rest(1, 'Descanso/mobilidade.', 'Usar o sabado para chegar bem ao teste final.'),
+        this.run(2, 'Teste', 8, '5 ou 8 km confortavel', 'confortavel', 5, 'Teste final: 5 km ou 8 km confortavel.', 'Escolha 5 km se estiver cansado; 8 km se estiver inteiro.'),
+      ]),
+    ];
+  }
+
   private week(
     phase: TrainingPhase,
     focus: string,
@@ -292,8 +499,9 @@ export class PlanService {
     order: number,
     weekStart: Date,
     planned: PlannedWorkout,
+    adaptSubTwo: boolean,
   ): Workout {
-    const adapted = this.subTwoWorkout(week, planned);
+    const adapted = adaptSubTwo ? this.subTwoWorkout(week, planned) : planned;
     const date = new Date(weekStart.getTime() + planned.offsetDays * MS_PER_DAY);
 
     return {

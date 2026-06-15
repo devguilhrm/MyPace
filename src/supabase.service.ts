@@ -4,6 +4,10 @@ import { TrainingPlan } from './types';
 interface SupabaseUserResponse {
   id?: string;
   email?: string;
+  user_metadata?: {
+    username?: string;
+    display_name?: string;
+  };
 }
 
 export interface StoredPlanRow {
@@ -72,6 +76,32 @@ export class SupabaseService {
     }
 
     return { saved: true };
+  }
+
+  async identifyUser(authorization: string | undefined) {
+    if (!this.url || !this.anonKey || !authorization) {
+      return null;
+    }
+
+    const token = authorization.replace(/^Bearer\s+/i, '').trim();
+    if (!token) return null;
+
+    const response = await fetch(`${this.url}/auth/v1/user`, {
+      headers: {
+        apikey: this.anonKey,
+        authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) return null;
+
+    const user = (await response.json()) as SupabaseUserResponse;
+    return {
+      id: user.id ?? '',
+      email: user.email ?? '',
+      username: user.user_metadata?.username ?? '',
+      displayName: user.user_metadata?.display_name ?? '',
+    };
   }
 
   private async requireUser(authorization: string | undefined) {

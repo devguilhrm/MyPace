@@ -28,6 +28,23 @@ export type WorkoutType =
   | 'Descanso completo'
   | 'Prova';
 
+export type UserRole = 'user' | 'coach';
+export type WorkoutSource = 'seed' | 'coach' | 'user-extra';
+
+export interface AppUserIdentity {
+  id: string;
+  email: string;
+  username: string;
+  displayName: string;
+  role: UserRole;
+}
+
+export interface WorkoutAuthor {
+  id: string;
+  role: UserRole | 'system';
+  name: string;
+}
+
 export interface WorkoutExecution {
   done: boolean;
   status?: WorkoutStatus;
@@ -55,11 +72,14 @@ export type WorkoutStatus = 'pendente' | 'finalizado' | 'perdido' | 'parcial' | 
 
 export interface Workout {
   id: string;
+  source?: WorkoutSource;
+  createdBy?: WorkoutAuthor;
+  assignedToUserId?: string;
   week: number;
   order: number;
   date: string;
   day: string;
-  type: WorkoutType;
+  type: WorkoutType | string;
   status: WorkoutStatus;
   distanceKm: number;
   distanceLabel?: string;
@@ -111,4 +131,5 @@ export interface TrainingPlan {
     purpose: string;
   }>;
   weeks: TrainingWeek[];
+  extraWorkouts?: Workout[];
 }

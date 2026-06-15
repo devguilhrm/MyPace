@@ -1,5 +1,5 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { TrainingPlan } from './types';
+import { AppUserIdentity, TrainingPlan, UserRole } from './types';
 
 interface SupabaseUserResponse {
   id?: string;
@@ -7,6 +7,12 @@ interface SupabaseUserResponse {
   user_metadata?: {
     username?: string;
     display_name?: string;
+    role?: UserRole;
+    user_role?: UserRole;
+  };
+  app_metadata?: {
+    role?: UserRole;
+    user_role?: UserRole;
   };
 }
 
@@ -107,12 +113,36 @@ export class SupabaseService {
       throw new UnauthorizedException('Sessao invalida.');
     }
 
-    return {
+    const identity: AppUserIdentity = {
       id: user.id,
       email: user.email ?? '',
       username: user.user_metadata?.username ?? '',
       displayName: user.user_metadata?.display_name ?? '',
+      role: this.resolveRole(user),
     };
+    return identity;
+  }
+
+  private resolveRole(user: SupabaseUserResponse): UserRole {
+    const metadataRole = user.app_metadata?.role
+      ?? user.app_metadata?.user_role
+      ?? user.user_metadata?.role
+      ?? user.user_metadata?.user_role;
+    if (metadataRole === 'coach') return 'coach';
+
+    const coachEmails = this.csv(process.env.COACH_EMAILS);
+    const coachUsernames = this.csv(process.env.COACH_USERNAMES);
+    const email = user.email?.toLowerCase() ?? '';
+    const username = user.user_metadata?.username?.toLowerCase() ?? '';
+
+    return coachEmails.includes(email) || coachUsernames.includes(username) ? 'coach' : 'user';
+  }
+
+  private csv(value: string | undefined) {
+    return (value ?? '')
+      .split(',')
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean);
   }
 
   private serviceHeaders() {

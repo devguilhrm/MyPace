@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import {
+  AppUserIdentity,
   TrainingPhase,
   TrainingPlan,
   TrainingWeek,
   Workout,
+  WorkoutAuthor,
   WorkoutType,
 } from './types';
 
@@ -30,17 +32,19 @@ interface WeekTemplate {
 
 const MS_PER_DAY = 86_400_000;
 
-interface AthleteIdentity {
-  email?: string;
-  username?: string;
-  displayName?: string;
-}
+type AthleteIdentity = AppUserIdentity;
+
+const SYSTEM_COACH: WorkoutAuthor = {
+  id: 'system-coach',
+  role: 'system',
+  name: 'MyPace Coach Seed',
+};
 
 @Injectable()
 export class PlanService {
   getPlanForUser(user: AthleteIdentity | null): TrainingPlan {
-    if (this.isFelipe(user)) return this.getFelipePlan();
-    return this.getInitialPlan();
+    const plan = this.isFelipe(user) ? this.getFelipePlan() : this.getInitialPlan();
+    return this.withSeedAuthorship(plan, user);
   }
 
   getInitialPlan(): TrainingPlan {
@@ -506,6 +510,8 @@ export class PlanService {
 
     return {
       id: `w${week}-${planned.offsetDays}-${planned.type.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+      source: 'seed',
+      createdBy: SYSTEM_COACH,
       week,
       order,
       date: this.formatDate(date),
@@ -523,6 +529,22 @@ export class PlanService {
       execution: {
         done: false,
       },
+    };
+  }
+
+  private withSeedAuthorship(plan: TrainingPlan, user: AthleteIdentity | null): TrainingPlan {
+    return {
+      ...plan,
+      extraWorkouts: plan.extraWorkouts ?? [],
+      weeks: plan.weeks.map((week) => ({
+        ...week,
+        workouts: week.workouts.map((workout) => ({
+          ...workout,
+          source: workout.source ?? 'seed',
+          createdBy: workout.createdBy ?? SYSTEM_COACH,
+          assignedToUserId: user?.id ?? workout.assignedToUserId,
+        })),
+      })),
     };
   }
 

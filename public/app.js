@@ -102,6 +102,7 @@ function bindEvents() {
   document.body.addEventListener('click', handleClick);
   document.body.addEventListener('input', handleInput);
   document.body.addEventListener('change', handleInput);
+  document.body.addEventListener('focusout', handleFocusOut);
   document.body.addEventListener('submit', handleSubmit);
   window.addEventListener('popstate', handleRouteChange);
 }
@@ -375,15 +376,13 @@ function handleInput(event) {
 
   if (target.name === 'pace') {
     const previousAutoPace = target.dataset.autoPace ?? '';
-    const cursorAtEnd = target.selectionStart === target.value.length;
-    target.value = maskPace(target.value);
-    if (cursorAtEnd) placeCursorAtEnd(target);
+    target.value = sanitizePaceInput(target.value);
     target.dataset.manualPace = String(Boolean(target.value.trim() && target.value !== previousAutoPace));
+    setPaceHint(target.closest('form'));
   }
 
   if (target.name === 'duration') {
-    target.value = maskDuration(target.value);
-    if (event.type === 'input') placeCursorAtEnd(target);
+    target.value = sanitizeDurationInput(target.value);
   }
 
   if (target.name === 'distance') {
@@ -406,6 +405,27 @@ function handleInput(event) {
   if (target.dataset.filter) {
     preparationFilters[target.dataset.filter] = target.value;
     render();
+  }
+}
+
+function handleFocusOut(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement)) return;
+
+  if (target.name === 'pace') {
+    target.value = normalizePaceInput(target.value);
+    setPaceHint(target.closest('form'));
+  }
+
+  if (target.name === 'duration') {
+    target.value = normalizeDurationInput(target.value);
+    updateAutoPace(target.closest('form'));
+  }
+
+  if (target.name === 'distance') {
+    const distance = parseDistanceInput(target.value);
+    if (Number.isFinite(distance)) target.value = formatDistanceInput(distance);
+    updateAutoPace(target.closest('form'));
   }
 }
 
@@ -1716,16 +1736,28 @@ function maskDistance(value) {
   return integerDigits;
 }
 
-function maskPace(value) {
+function sanitizePaceInput(value) {
   const raw = String(value ?? '').trim();
+  if (raw.includes(':')) return raw.replace(/[^\d:]/g, '').replace(/:{2,}/g, ':').slice(0, 5);
+  return raw.replace(/\D/g, '').slice(0, 4);
+}
+
+function maskPace(value) {
+  const raw = sanitizePaceInput(value);
   if (raw.includes(':')) return raw.replace(/[^\d:]/g, '').replace(/:{2,}/g, ':').slice(0, 5);
   const digits = raw.replace(/\D/g, '').slice(0, 4);
   if (digits.length <= 2) return digits;
   return `${Number(digits.slice(0, -2))}:${digits.slice(-2)}`;
 }
 
-function maskDuration(value) {
+function sanitizeDurationInput(value) {
   const raw = String(value ?? '').trim();
+  if (raw.includes(':')) return raw.replace(/[^\d:]/g, '').replace(/:{2,}/g, ':').slice(0, 8);
+  return raw.replace(/\D/g, '').slice(0, 6);
+}
+
+function maskDuration(value) {
+  const raw = sanitizeDurationInput(value);
   if (raw.includes(':')) return raw.replace(/[^\d:]/g, '').replace(/:{2,}/g, ':').slice(0, 8);
   const digits = raw.replace(/\D/g, '').slice(0, 6);
   if (digits.length <= 2) return digits;
@@ -1734,7 +1766,8 @@ function maskDuration(value) {
 }
 
 function parseDurationToSeconds(value) {
-  const parts = String(value ?? '').split(':').map(Number);
+  const formatted = String(value ?? '').includes(':') ? String(value ?? '') : maskDuration(value);
+  const parts = formatted.split(':').map(Number);
   if (![2, 3].includes(parts.length) || parts.some((part) => !Number.isFinite(part))) return null;
   const [hours, minutes, seconds] = parts.length === 3 ? parts : [0, parts[0], parts[1]];
   if (minutes >= 60 || seconds >= 60 || hours < 0 || minutes < 0 || seconds < 0) return null;
@@ -1753,16 +1786,17 @@ function updateAutoPace(form) {
   paceField.value = nextPace;
   paceField.dataset.autoPace = nextPace;
   paceField.dataset.manualPace = 'false';
+  setPaceHint(form);
 }
 
-function placeCursorAtEnd(input) {
-  window.requestAnimationFrame(() => {
-    try {
-      input.setSelectionRange(input.value.length, input.value.length);
-    } catch {
-      // Some mobile keyboards do not expose selection for every input state.
-    }
-  });
+function setPaceHint(form) {
+  const paceField = form?.querySelector('[name="pace"]');
+  const paceHint = form?.querySelector('#paceHint');
+  if (!paceField || !paceHint) return;
+  const manual = paceField.dataset.manualPace === 'true';
+  paceHint.textContent = manual
+    ? 'Pace editado manualmente. Limpe o campo para recalcular.'
+    : 'Calculado automaticamente pela distancia e tempo.';
 }
 
 function parsePaceToSeconds(value) {

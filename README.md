@@ -66,6 +66,10 @@ npm run seed:user
 
 Veja [docs/API.md](docs/API.md).
 
+## Design
+
+Veja [docs/DESIGN.md](docs/DESIGN.md).
+
 ## Banco
 
 O schema do Supabase fica em [supabase/schema.sql](supabase/schema.sql).

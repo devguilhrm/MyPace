@@ -1,16 +1,18 @@
-const STORAGE_KEY = 'mypace:guilherme:v5';
-const SETTINGS_KEY = 'mypace:settings:v1';
+const STORAGE_KEY = 'mypace:guilherme:v6';
+const SETTINGS_KEY = 'mypace:settings:v2';
 const PLAN_VERSION = '5.0.0';
 
 let state = null;
 let settings = loadSettings();
-let selectedPhase = 'todas';
+let activeView = 'dashboard';
 let selectedWeek = '1';
 let syncTimer = null;
+let toastTimer = null;
 let authConfig = null;
 let supabaseClient = null;
 let session = null;
 let localMode = false;
+let viewMode = 'coach';
 
 const authView = document.querySelector('#authView');
 const appView = document.querySelector('#appView');
@@ -19,13 +21,17 @@ const loginEmail = document.querySelector('#loginEmail');
 const loginPassword = document.querySelector('#loginPassword');
 const authMessage = document.querySelector('#authMessage');
 const authModeLabel = document.querySelector('#authModeLabel');
-const summaryEl = document.querySelector('#summary');
-const weeksEl = document.querySelector('#weeks');
-const phaseTabsEl = document.querySelector('#phaseTabs');
-const weekSelectEl = document.querySelector('#weekSelect');
+const mainContent = document.querySelector('#mainContent');
 const saveStateEl = document.querySelector('#saveState');
 const themeToggleBtn = document.querySelector('#themeToggleBtn');
-const methodologyPanel = document.querySelector('#methodologyPanel');
+const logoutBtn = document.querySelector('#logoutBtn');
+const viewTitle = document.querySelector('#viewTitle');
+const viewEyebrow = document.querySelector('#viewEyebrow');
+const currentWeekLabel = document.querySelector('#currentWeekLabel');
+const selectedAthleteName = document.querySelector('#selectedAthleteName');
+const selectedAvatar = document.querySelector('#selectedAvatar');
+const modeToggle = document.querySelector('#modeToggle');
+const toastEl = document.querySelector('#toast');
 
 applyTheme();
 
@@ -54,32 +60,25 @@ async function boot() {
 
 function bindEvents() {
   loginForm.addEventListener('submit', signIn);
-  document.querySelector('#exportBtn').addEventListener('click', exportJson);
-  document.querySelector('#resetBtn').addEventListener('click', resetPlan);
-  document.querySelector('#logoutBtn').addEventListener('click', logout);
   themeToggleBtn.addEventListener('click', toggleTheme);
-  weekSelectEl.addEventListener('change', (event) => {
-    selectedWeek = event.target.value;
-    renderWeek();
+  logoutBtn.addEventListener('click', logout);
+  modeToggle.addEventListener('change', () => {
+    viewMode = modeToggle.checked ? 'athlete' : 'coach';
+    render();
   });
-  document.body.addEventListener('input', handleExecutionInput);
-  document.body.addEventListener('change', handleExecutionInput);
+
+  document.body.addEventListener('click', handleClick);
+  document.body.addEventListener('input', handleInput);
+  document.body.addEventListener('change', handleInput);
 }
 
 async function fetchConfig() {
   try {
     const response = await fetch('/api/config');
-    if (!response.ok) {
-      throw new Error('Config indisponivel');
-    }
+    if (!response.ok) throw new Error('Config indisponivel');
     return response.json();
   } catch {
-    return {
-      authEnabled: false,
-      persistenceEnabled: false,
-      supabaseUrl: '',
-      supabaseAnonKey: '',
-    };
+    return { authEnabled: false, persistenceEnabled: false, supabaseUrl: '', supabaseAnonKey: '' };
   }
 }
 
@@ -89,43 +88,37 @@ function setupSupabase() {
     return;
   }
 
-  supabaseClient = window.supabase.createClient(
-    authConfig.supabaseUrl,
-    authConfig.supabaseAnonKey,
-  );
+  supabaseClient = window.supabase.createClient(authConfig.supabaseUrl, authConfig.supabaseAnonKey);
   authModeLabel.textContent = authConfig.persistenceEnabled ? 'nuvem' : 'login';
 }
 
 async function signIn(event) {
   event.preventDefault();
-  const loginId = loginEmail.value.trim();
-  const password = loginPassword.value;
-
   if (!supabaseClient) {
-    setAuthMessage('Supabase nao configurado. Configure as variaveis de ambiente para entrar.');
+    setAuthMessage('Supabase não configurado.');
     return;
   }
 
   try {
     setAuthMessage('Entrando...');
     const { data, error } = await supabaseClient.auth.signInWithPassword({
-      email: normalizeLogin(loginId),
-      password,
+      email: normalizeLogin(loginEmail.value.trim()),
+      password: loginPassword.value,
     });
 
     if (error) {
-      setAuthMessage('Usuario ou senha invalidos.');
+      setAuthMessage('Usuário ou senha inválidos.');
       return;
     }
 
     session = data.session;
     localMode = false;
-    setAuthMessage('Carregando plano...');
+    setAuthMessage('Carregando workspace...');
     await startApp();
     setAuthMessage('');
   } catch (error) {
     console.error(error);
-    setAuthMessage('Login feito, mas nao foi possivel carregar o plano. Tente atualizar a pagina.');
+    setAuthMessage('Não foi possível entrar. Tente novamente.');
   }
 }
 
@@ -141,10 +134,10 @@ async function logout() {
 
 async function startApp() {
   showApp();
+  renderSkeleton();
   state = await loadPlan();
-  selectedPhase = 'todas';
-  selectedWeek = '1';
-  persist({ skipRemote: true });
+  selectedWeek = String(currentWeek()?.week ?? 1);
+  persist({ skipRemote: true, silent: true });
   render();
 }
 
@@ -180,325 +173,462 @@ function readLocalPlan() {
 
 async function fetchInitialPlan() {
   const response = await fetch('/api/plan');
-  if (!response.ok) {
-    throw new Error('Falha ao carregar plano inicial');
-  }
+  if (!response.ok) throw new Error('Falha ao carregar plano inicial');
   return response.json();
 }
 
-function handleExecutionInput(event) {
+function handleClick(event) {
+  const nav = event.target.closest('[data-view]');
+  if (nav) {
+    activeView = nav.dataset.view;
+    if (nav.dataset.week) {
+      selectedWeek = String(nav.dataset.week);
+    }
+    document.querySelectorAll('[data-view]').forEach((item) => item.classList.toggle('is-active', item.dataset.view === activeView));
+    render();
+    return;
+  }
+
+  const weekButton = event.target.closest('[data-week]');
+  if (weekButton) {
+    selectedWeek = weekButton.dataset.week;
+    activeView = 'workout';
+    document.querySelectorAll('[data-view]').forEach((item) => item.classList.toggle('is-active', item.dataset.view === activeView));
+    render();
+  }
+}
+
+function handleInput(event) {
   const target = event.target;
-  if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement)) {
-    return;
-  }
-  if (!target.dataset.week || !target.dataset.workout || !target.dataset.execution) {
-    return;
-  }
+  if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement)) return;
+  if (!target.dataset.week || !target.dataset.workout || !target.dataset.execution) return;
 
   const workout = state.weeks[Number(target.dataset.week)].workouts[Number(target.dataset.workout)];
   workout.execution ??= { done: false };
   workout.execution[target.dataset.execution] = readInputValue(target);
-
   persist();
-  renderSummary();
-
-  if (target.type === 'checkbox') {
-    renderWeek();
-  }
+  renderHeader();
 }
 
 function readInputValue(target) {
-  if (target.type === 'checkbox') {
-    return target.checked;
-  }
-  if (target.type === 'number') {
-    return target.value === '' ? undefined : Number(target.value);
-  }
+  if (target.type === 'checkbox') return target.checked;
+  if (target.type === 'number') return target.value === '' ? undefined : Number(target.value);
   return target.value;
 }
 
 function render() {
-  renderSummary();
-  renderMethodology();
-  renderPhaseTabs();
-  renderWeekSelect();
-  renderWeek();
+  renderHeader();
+  const renderers = {
+    dashboard: renderDashboard,
+    athlete: renderAthleteProfile,
+    workout: renderWorkoutBuilder,
+    report: renderReport,
+  };
+  mainContent.innerHTML = renderers[activeView]();
   drawIcons();
 }
 
-function renderSummary() {
-  const planned = state.weeks.reduce((sum, week) => sum + Number(week.targetVolumeKm || 0), 0);
-  const executed = state.weeks.reduce((sum, week) => sum + executedWeekVolume(week), 0);
-  const allWorkouts = state.weeks.flatMap((week) => week.workouts);
-  const completed = allWorkouts.filter((workout) => workout.execution?.done).length;
-  const runWorkouts = allWorkouts.filter((workout) => workout.distanceKm > 0).length;
-  const next = nextWorkout();
-  const adherence = runWorkouts ? Math.round((completed / allWorkouts.length) * 100) : 0;
-  const risk = riskSummary();
-
-  summaryEl.innerHTML = [
-    metric('Meta', '2h05-2h10', 'Ritmo realista 6:00-6:10/km'),
-    metric('Proximo', next ? next.type : 'Plano completo', next ? `${formatDate(next.date)} - ${next.distanceLabel ?? `${round(next.distanceKm)} km`}` : 'Sem treinos pendentes'),
-    metric('Volume', `${round(executed)} / ${round(planned)} km`, `${state.planMeta.weeks} semanas no ciclo`),
-    metric('Conclusao', `${adherence}%`, `${completed}/${allWorkouts.length} itens registrados`),
-    metric('Status', risk.label, risk.note),
-  ].join('');
+function renderHeader() {
+  const athlete = state?.athlete?.name ?? 'Guilherme';
+  const week = currentWeek();
+  const labels = {
+    dashboard: ['Dashboard do coach', viewMode === 'coach' ? 'Atletas acompanhados' : 'Minha semana'],
+    athlete: ['Perfil do atleta', athlete],
+    workout: ['Montagem de treino', `Semana ${selectedWeek}`],
+    report: ['Relatório de evolução', 'Pace e consistência'],
+  };
+  viewEyebrow.textContent = labels[activeView][0];
+  viewTitle.textContent = labels[activeView][1];
+  selectedAthleteName.textContent = athlete;
+  selectedAvatar.textContent = athlete.slice(0, 1).toUpperCase();
+  currentWeekLabel.textContent = week ? `Semana ${week.week} • ${week.keyWorkout}` : 'Ciclo completo';
 }
 
-function metric(label, value, note) {
+function renderDashboard() {
+  const athletes = coachAthletes();
   return `
-    <article class="metric-card">
-      <span>${escapeHtml(label)}</span>
-      <strong>${escapeHtml(value)}</strong>
-      <p>${escapeHtml(note)}</p>
-    </article>
+    <section class="coach-grid">
+      ${athletes.map((athlete) => athleteCard(athlete)).join('')}
+    </section>
   `;
 }
 
-function renderMethodology() {
-  const zones = state.planMeta?.paceZones ?? [];
-  const scenarios = state.planMeta?.raceScenarios ?? [];
-  methodologyPanel.innerHTML = `
-    <h3>Ritmos</h3>
-    <div class="zone-list">
-      ${zones.map((zone) => `
-        <div class="zone-chip">
-          <strong>${escapeHtml(zone.name)}</strong>
-          <span>${escapeHtml(zone.pace)} | RPE ${escapeHtml(zone.rpe)}</span>
-        </div>
-      `).join('')}
-    </div>
-    <h3>Cenarios</h3>
-    <div class="scenario-list">
-      ${scenarios.map((scenario) => `
+function athleteCard(athlete) {
+  return `
+    <article class="athlete-card">
+      <header class="card-header">
+        <div class="avatar">${escapeHtml(athlete.initials)}</div>
         <div>
-          <strong>${escapeHtml(scenario.name)}</strong>
-          <span>${escapeHtml(scenario.time)} | ${escapeHtml(scenario.pace)}</span>
+          <h2>${escapeHtml(athlete.name)}</h2>
+          <p>${escapeHtml(athlete.nextWorkout)}</p>
         </div>
-      `).join('')}
-    </div>
-  `;
-}
-
-function renderPhaseTabs() {
-  const phases = ['todas', ...state.phases.map((phase) => phase.name)];
-  phaseTabsEl.innerHTML = phases
-    .map((phase) => `
-      <button class="tab-button ${selectedPhase === phase ? 'is-active' : ''}" type="button" data-phase="${escapeHtml(phase)}">
-        ${escapeHtml(labelPhase(phase))}
-      </button>
-    `)
-    .join('');
-
-  phaseTabsEl.querySelectorAll('[data-phase]').forEach((button) => {
-    button.addEventListener('click', () => {
-      selectedPhase = button.dataset.phase;
-      selectedWeek = String(filteredWeeks()[0]?.week ?? 1);
-      renderPhaseTabs();
-      renderWeekSelect();
-      renderWeek();
-    });
-  });
-}
-
-function renderWeekSelect() {
-  const weeks = filteredWeeks();
-  if (!weeks.some((week) => String(week.week) === selectedWeek) && weeks[0]) {
-    selectedWeek = String(weeks[0].week);
-  }
-
-  weekSelectEl.innerHTML = weeks
-    .map((week) => `<option value="${week.week}">Semana ${week.week} - ${escapeHtml(week.keyWorkout ?? week.focus)}</option>`)
-    .join('');
-  weekSelectEl.value = selectedWeek;
-}
-
-function renderWeek() {
-  const week = state.weeks.find((item) => String(item.week) === selectedWeek);
-  if (!week) {
-    weeksEl.innerHTML = '<div class="empty-state">Nenhuma semana encontrada.</div>';
-    return;
-  }
-
-  const weekIndex = state.weeks.indexOf(week);
-  const visibleWeeks = filteredWeeks();
-  const visibleIndex = visibleWeeks.findIndex((item) => item.week === week.week);
-  const previousWeek = visibleWeeks[visibleIndex - 1];
-  const nextWeekItem = visibleWeeks[visibleIndex + 1];
-  const risk = weekRisk(week, weekIndex);
-
-  weeksEl.innerHTML = `
-    <article class="week-card">
-      <header class="week-hero">
-        <div>
-          <span class="phase-label">${escapeHtml(labelPhase(week.phase))}</span>
-          <h2>Semana ${week.week}</h2>
-          <p>${escapeHtml(week.focus)}</p>
-        </div>
-        <div class="week-numbers">
-          <span><b>${escapeHtml(week.volumeLabel ?? `${round(week.targetVolumeKm)} km`)}</b> volume</span>
-          <span><b>${escapeHtml(week.longRunLabel ?? '-')}</b> longao</span>
-          <span class="${risk.level}"><b>${escapeHtml(risk.label)}</b> status</span>
-        </div>
+        ${statusBadge(athlete.status)}
       </header>
 
-      <div class="workout-list">
-        ${week.workouts.map((workout, workoutIndex) => workoutCard(workout, weekIndex, workoutIndex)).join('')}
+      <div class="metric-row">
+        ${compactMetric('Pace semanal', athlete.weeklyPace, true)}
+        ${compactMetric('Carga', athlete.loadLabel)}
+        ${compactMetric('Volume', `${athlete.volume} km`)}
       </div>
 
-      <section class="coach-panel ${risk.level}">
-        <h3>Comentario da semana</h3>
-        <p>${escapeHtml(risk.note)}</p>
-      </section>
+      <div>
+        <div class="progress-label">
+          <span>Progresso semanal</span>
+          <strong>${athlete.progress}%</strong>
+        </div>
+        <div class="progress-track"><span style="width:${athlete.progress}%"></span></div>
+      </div>
 
-      <nav class="week-nav">
-        <button class="button" type="button" ${previousWeek ? '' : 'disabled'} onclick="goToWeek('${previousWeek?.week ?? ''}')">
-          <i data-lucide="arrow-left"></i><span>Anterior</span>
-        </button>
-        <button class="button" type="button" ${nextWeekItem ? '' : 'disabled'} onclick="goToWeek('${nextWeekItem?.week ?? ''}')">
-          <span>Proxima</span><i data-lucide="arrow-right"></i>
-        </button>
-      </nav>
+      <div class="quick-actions">
+        <button class="button primary" data-view="workout" data-week="${selectedWeek}" type="button"><i data-lucide="plus"></i><span>Adicionar treino</span></button>
+        <button class="button" data-view="report" type="button"><i data-lucide="file-line-chart"></i><span>Ver relatório</span></button>
+        <button class="button" type="button"><i data-lucide="message-circle"></i><span>Mensagem</span></button>
+      </div>
     </article>
   `;
-
-  drawIcons();
 }
 
-function workoutCard(workout, weekIndex, workoutIndex) {
-  const execution = workout.execution ?? {};
-  const done = Boolean(execution.done);
+function renderAthleteProfile() {
+  const week = currentWeek();
+  const completed = completedWorkouts();
   return `
-    <article class="workout-card ${done ? 'is-done' : ''}">
-      <div class="workout-main">
-        <label class="check-row">
-          <input data-week="${weekIndex}" data-workout="${workoutIndex}" data-execution="done" type="checkbox" ${done ? 'checked' : ''} />
-          <span>${done ? 'Feito' : 'Pendente'}</span>
-        </label>
-        <div>
-          <span class="workout-date">${escapeHtml(workout.day)} | ${formatDate(workout.date)}</span>
-          <h3>${escapeHtml(workout.type)}</h3>
-          <p>${escapeHtml(workout.notes)}</p>
+    <section class="profile-layout">
+      <article class="feature-card midnight-card">
+        <div class="profile-hero">
+          <div class="avatar large">G</div>
+          <div>
+            <p class="eyebrow lava-text">Atleta selecionado</p>
+            <h2>${escapeHtml(state.athlete.name)}</h2>
+            <p>${escapeHtml(state.athlete.objective)}</p>
+          </div>
         </div>
+        <div class="metric-row">
+          ${compactMetric('Semana atual', `S${week.week}`)}
+          ${compactMetric('Próximo treino', nextWorkout()?.type ?? 'Completo')}
+          ${compactMetric('Conclusão', `${completed.percent}%`)}
+          ${compactMetric('Meta', '2h05')}
+        </div>
+      </article>
+
+      <article class="feature-card">
+        <h2>Zonas e ritmos</h2>
+        <div class="zones-grid">
+          ${(state.planMeta.paceZones ?? []).map((zone) => `
+            <div class="zone-item">
+              <strong>${escapeHtml(zone.name)}</strong>
+              <span>${escapeHtml(zone.pace)}</span>
+              <small>RPE ${escapeHtml(zone.rpe)}</small>
+            </div>
+          `).join('')}
+        </div>
+      </article>
+
+      <article class="feature-card">
+        <h2>Semanas do ciclo</h2>
+        <div class="week-strip">
+          ${state.weeks.map((item) => `
+            <button class="week-pill ${String(item.week) === selectedWeek ? 'is-active' : ''}" data-week="${item.week}" type="button">
+              <span>S${item.week}</span>
+              <strong>${escapeHtml(item.volumeLabel ?? `${item.targetVolumeKm} km`)}</strong>
+            </button>
+          `).join('')}
+        </div>
+      </article>
+    </section>
+  `;
+}
+
+function renderWorkoutBuilder() {
+  const week = state.weeks.find((item) => String(item.week) === selectedWeek) ?? currentWeek();
+  const weekIndex = state.weeks.indexOf(week);
+  const selectedWorkout = week.workouts.find((workout) => workout.distanceKm > 0) ?? week.workouts[0];
+  const blocks = workoutBlocks(selectedWorkout);
+
+  return `
+    <section class="workout-layout">
+      <aside class="week-picker-card">
+        <h2>Semana de treino</h2>
+        <select class="week-select" onchange="window.setWeek(this.value)">
+          ${state.weeks.map((item) => `<option value="${item.week}" ${item.week === week.week ? 'selected' : ''}>Semana ${item.week} • ${escapeHtml(item.keyWorkout ?? item.focus)}</option>`).join('')}
+        </select>
+        <div class="load-bar"><span style="width:${loadPercent(week)}%"></span></div>
+        <p>${escapeHtml(week.focus)} • ${escapeHtml(week.volumeLabel ?? `${week.targetVolumeKm} km`)}</p>
+      </aside>
+
+      <article class="feature-card">
+        <div class="card-header">
+          <div>
+            <p class="eyebrow">Timeline do treino</p>
+            <h2>${escapeHtml(selectedWorkout.type)}</h2>
+            <p>${escapeHtml(selectedWorkout.guidance ?? selectedWorkout.notes)}</p>
+          </div>
+          ${intensityPill(selectedWorkout)}
+        </div>
+
+        <div class="timeline">
+          ${blocks.map((block, index) => workoutBlock(block, index)).join('')}
+        </div>
+      </article>
+
+      <article class="feature-card">
+        <h2>Registro da execução</h2>
+        <div class="execution-list">
+          ${week.workouts.map((workout, workoutIndex) => executionCard(workout, weekIndex, workoutIndex)).join('')}
+        </div>
+      </article>
+    </section>
+  `;
+}
+
+function workoutBlock(block, index) {
+  return `
+    <article class="timeline-block">
+      <span class="block-index">${index + 1}</span>
+      <div>
+        <strong contenteditable="true">${escapeHtml(block.title)}</strong>
+        <p contenteditable="true">${escapeHtml(block.detail)}</p>
       </div>
-
-      <div class="workout-facts">
-        <span><b>${escapeHtml(workout.distanceLabel ?? `${round(workout.distanceKm)} km`)}</b> distancia</span>
-        <span><b>${escapeHtml(workout.paceTarget)}</b> ritmo</span>
-        <span><b>RPE ${escapeHtml(workout.effort)}</b> alvo</span>
-      </div>
-
-      <p class="guidance">${escapeHtml(workout.guidance ?? '')}</p>
-
-      <div class="execution-grid">
-        <label>
-          Km feitos
-          <input data-week="${weekIndex}" data-workout="${workoutIndex}" data-execution="distanceKm" type="number" min="0" step="0.1" value="${execution.distanceKm ?? ''}" placeholder="${workout.distanceKm || 0}" />
-        </label>
-        <label>
-          Pace medio
-          <input data-week="${weekIndex}" data-workout="${workoutIndex}" data-execution="pace" type="text" value="${escapeAttr(execution.pace ?? '')}" placeholder="6:45/km" />
-        </label>
-        <label>
-          RPE real
-          <input data-week="${weekIndex}" data-workout="${workoutIndex}" data-execution="feeling" type="number" min="1" max="10" value="${execution.feeling ?? ''}" placeholder="${workout.effort}" />
-        </label>
-        <label>
-          Observacoes
-          <textarea data-week="${weekIndex}" data-workout="${workoutIndex}" data-execution="notes" rows="2" placeholder="dor, sono, calor, abastecimento">${escapeHtml(execution.notes ?? '')}</textarea>
-        </label>
+      <div class="block-data">
+        <span contenteditable="true">${escapeHtml(block.duration)}</span>
+        <b contenteditable="true">${escapeHtml(block.pace)}</b>
+        <small contenteditable="true">${escapeHtml(block.zone)}</small>
       </div>
     </article>
   `;
+}
+
+function executionCard(workout, weekIndex, workoutIndex) {
+  const execution = workout.execution ?? {};
+  return `
+    <article class="execution-card">
+      <label class="done-check">
+        <input data-week="${weekIndex}" data-workout="${workoutIndex}" data-execution="done" type="checkbox" ${execution.done ? 'checked' : ''} />
+        <span>${escapeHtml(workout.type)}</span>
+      </label>
+      <div class="inline-fields">
+        <input data-week="${weekIndex}" data-workout="${workoutIndex}" data-execution="distanceKm" type="number" min="0" step="0.1" value="${execution.distanceKm ?? ''}" placeholder="${workout.distanceKm || 0} km" />
+        <input data-week="${weekIndex}" data-workout="${workoutIndex}" data-execution="pace" type="text" value="${escapeAttr(execution.pace ?? '')}" placeholder="mm:ss/km" />
+        <input data-week="${weekIndex}" data-workout="${workoutIndex}" data-execution="feeling" type="number" min="1" max="10" value="${execution.feeling ?? ''}" placeholder="RPE" />
+      </div>
+      <textarea data-week="${weekIndex}" data-workout="${workoutIndex}" data-execution="notes" rows="2" placeholder="Observações">${escapeHtml(execution.notes ?? '')}</textarea>
+    </article>
+  `;
+}
+
+function renderReport() {
+  const points = paceTrend();
+  return `
+    <section class="report-layout">
+      <article class="feature-card">
+        <div class="card-header">
+          <div>
+            <p class="eyebrow">Evolução de pace</p>
+            <h2>Últimas semanas</h2>
+          </div>
+          <strong class="pace-number">${points.at(-1)?.pace ?? '6:05'}/km</strong>
+        </div>
+        <div class="pace-chart" aria-label="Gráfico simples de evolução de pace">
+          ${points.map((point, index) => `<span style="height:${point.height}%" title="S${index + 1} ${point.pace}/km"></span>`).join('')}
+          <i></i>
+        </div>
+        <div class="chart-legend">
+          <span><b class="lava-dot"></b>Pace</span>
+          <span><b class="green-dot"></b>Meta</span>
+        </div>
+      </article>
+
+      <article class="feature-card">
+        <h2>Resumo técnico</h2>
+        <div class="metric-row">
+          ${compactMetric('Pace médio', averagePace(), true)}
+          ${compactMetric('Volume total', `${round(totalExecuted() || totalPlanned())} km`)}
+          ${compactMetric('PR provável', '2h06')}
+          ${compactMetric('Carga', riskSummary().label)}
+        </div>
+      </article>
+
+      <article class="empty-state">
+        <div class="empty-illustration"></div>
+        <div>
+          <h2>Relatório exportável</h2>
+          <p>Quando houver mais execuções registradas, o relatório ganha comparativos por bloco e por fase.</p>
+          <button class="button primary" type="button" onclick="window.exportJson()"><i data-lucide="download"></i><span>Exportar JSON</span></button>
+        </div>
+      </article>
+    </section>
+  `;
+}
+
+function compactMetric(label, value, mono = false) {
+  return `<div class="mini-metric"><span>${escapeHtml(label)}</span><strong class="${mono ? 'mono' : ''}">${escapeHtml(value)}</strong></div>`;
+}
+
+function statusBadge(status) {
+  const labels = { green: 'No prazo', lava: 'Atrasado', midnight: 'Lesionado' };
+  return `<span class="status-badge ${status}">${labels[status]}</span>`;
+}
+
+function intensityPill(workout) {
+  const effort = Number(workout.effort || 0);
+  const label = workout.type === 'Prova' ? 'Race' : effort >= 7 ? 'Hard' : effort >= 5 ? 'Moderate' : 'Easy';
+  return `<span class="intensity-pill ${label.toLowerCase()}">${label}</span>`;
+}
+
+function coachAthletes() {
+  const completed = completedWorkouts();
+  const next = nextWorkout();
+  const executed = totalExecuted();
+  return [
+    {
+      initials: 'G',
+      name: state.athlete.name,
+      nextWorkout: next ? `${next.type} • ${next.distanceLabel}` : 'Ciclo completo',
+      weeklyPace: averagePace(),
+      loadLabel: riskSummary().label,
+      volume: round(executed || currentWeek().targetVolumeKm),
+      progress: completed.percent,
+      status: 'green',
+    },
+    { initials: 'M', name: 'Marina Costa', nextWorkout: 'Tempo run • 8 km', weeklyPace: '5:48/km', loadLabel: 'média', volume: 28, progress: 72, status: 'green' },
+    { initials: 'R', name: 'Rafael Lima', nextWorkout: 'Longão • 16 km', weeklyPace: '6:12/km', loadLabel: 'alta', volume: 36, progress: 64, status: 'lava' },
+    { initials: 'B', name: 'Bianca Alves', nextWorkout: 'Easy • 5 km', weeklyPace: '6:40/km', loadLabel: 'baixa', volume: 18, progress: 86, status: 'green' },
+    { initials: 'T', name: 'Thiago Reis', nextWorkout: 'Recuperação', weeklyPace: '7:05/km', loadLabel: 'baixa', volume: 12, progress: 42, status: 'midnight' },
+    { initials: 'L', name: 'Luiza Rocha', nextWorkout: 'Intervalado • 6x800m', weeklyPace: '5:22/km', loadLabel: 'média', volume: 31, progress: 78, status: 'green' },
+  ];
+}
+
+function workoutBlocks(workout) {
+  if (workout.type === 'Intervalado') {
+    return [
+      { title: 'Aquecimento', detail: 'Rodagem leve + mobilidade dinâmica', duration: '12 min', pace: '6:50/km', zone: 'Z2' },
+      { title: workout.paceTarget.split(' em ')[0], detail: 'Repetições técnicas com controle de forma', duration: '24 min', pace: paceFrom(workout.paceTarget), zone: 'Z4' },
+      { title: 'Recuperação', detail: '2 min trote entre repetições', duration: '10 min', pace: '7:20/km', zone: 'Z1' },
+      { title: 'Desaquecimento', detail: 'Soltar respiração e cadência', duration: '8 min', pace: '7:10/km', zone: 'Z1' },
+    ];
+  }
+  if (workout.type === 'Ritmo de meia' || workout.type === 'Tempo run') {
+    return [
+      { title: 'Aquecimento', detail: 'Entrada progressiva sem pressa', duration: '12 min', pace: '6:45/km', zone: 'Z2' },
+      { title: workout.notes, detail: workout.guidance ?? 'Bloco controlado', duration: '30 min', pace: paceFrom(workout.paceTarget), zone: 'Z3/Z4' },
+      { title: 'Recuperação', detail: 'Trote leve entre blocos', duration: '6 min', pace: '7:10/km', zone: 'Z1' },
+      { title: 'Desaquecimento', detail: 'Fechar melhor do que começou', duration: '8 min', pace: '7:20/km', zone: 'Z1' },
+    ];
+  }
+  return [
+    { title: 'Preparação', detail: 'Respiração, cadência e saída controlada', duration: '5 min', pace: 'leve', zone: 'Z1' },
+    { title: workout.type, detail: workout.notes, duration: estimateDuration(workout), pace: paceFrom(workout.paceTarget), zone: workout.effort >= 7 ? 'Z4' : 'Z2' },
+    { title: 'Fechamento', detail: workout.guidance ?? 'Registrar sensação ao final', duration: '5 min', pace: 'solto', zone: 'Z1' },
+  ];
 }
 
 function weekRisk(week, weekIndex) {
   const planned = Number(week.targetVolumeKm || 0);
   const executed = executedWeekVolume(week);
-  const doneRuns = week.workouts.filter((workout) => workout.distanceKm > 0 && workout.execution?.done);
   const highRpe = week.workouts.some((workout) => Number(workout.execution?.feeling || 0) >= 8);
   const previous = state.weeks[weekIndex - 1];
-
-  if (executed > planned * 1.15 && executed > 0) {
-    return {
-      level: 'red',
-      label: 'vermelho',
-      note: 'Voce passou mais de 15% do volume-alvo. Reduza impacto nas proximas 48h e nao compense treino perdido.',
-    };
-  }
-
-  if (highRpe) {
-    return {
-      level: 'amber',
-      label: 'amarelo',
-      note: 'Houve RPE alto. Mantenha os proximos treinos faceis e remova intensidade se a fadiga persistir.',
-    };
-  }
-
-  if (previous && planned > Number(previous.targetVolumeKm || 0) * 1.12 && week.phase !== 'tapering') {
-    return {
-      level: 'amber',
-      label: 'amarelo',
-      note: 'Semana com aumento relevante de volume. Execute os faceis em Z2 real e proteja o longao.',
-    };
-  }
-
-  if (doneRuns.length >= 3 || executed === 0) {
-    return {
-      level: 'green',
-      label: 'verde',
-      note: 'Plano coerente com a fase. Complete os treinos sem acelerar os dias faceis.',
-    };
-  }
-
-  return {
-    level: 'amber',
-    label: 'amarelo',
-    note: 'Semana parcialmente registrada. Se perdeu treino, siga o calendario sem tentar pagar no dia seguinte.',
-  };
+  if (executed > planned * 1.15 && executed > 0) return { level: 'lava', label: 'alta', note: 'Carga acima do planejado. Reduzir impacto nas próximas 48h.' };
+  if (highRpe) return { level: 'lava', label: 'média', note: 'RPE alto registrado. Manter próximos treinos fáceis.' };
+  if (previous && planned > Number(previous.targetVolumeKm || 0) * 1.12 && week.phase !== 'tapering') return { level: 'lava', label: 'média', note: 'Semana com aumento de volume. Priorizar Z2 e sono.' };
+  return { level: 'green', label: 'baixa', note: 'Carga coerente com a fase atual.' };
 }
 
 function riskSummary() {
-  const currentWeek = state.weeks.find((week) => week.workouts.some((workout) => !workout.execution?.done && workout.distanceKm > 0)) ?? state.weeks.at(-1);
-  return weekRisk(currentWeek, state.weeks.indexOf(currentWeek));
+  const week = currentWeek();
+  return weekRisk(week, state.weeks.indexOf(week));
 }
 
-function executedWeekVolume(week) {
-  return week.workouts.reduce((sum, workout) => {
-    if (!workout.execution?.done) {
-      return sum;
-    }
-    return sum + Number(workout.execution.distanceKm ?? workout.distanceKm ?? 0);
-  }, 0);
+function currentWeek() {
+  return state.weeks.find((week) => week.workouts.some((workout) => !workout.execution?.done && workout.distanceKm > 0)) ?? state.weeks.at(-1);
 }
 
 function nextWorkout() {
-  return state.weeks
-    .flatMap((week) => week.workouts)
-    .find((workout) => !workout.execution?.done && workout.distanceKm > 0);
+  return state.weeks.flatMap((week) => week.workouts).find((workout) => !workout.execution?.done && workout.distanceKm > 0);
 }
 
-function filteredWeeks() {
-  return selectedPhase === 'todas'
-    ? state.weeks
-    : state.weeks.filter((week) => week.phase === selectedPhase);
+function completedWorkouts() {
+  const all = state.weeks.flatMap((week) => week.workouts).filter((workout) => workout.distanceKm > 0);
+  const done = all.filter((workout) => workout.execution?.done);
+  return { done: done.length, total: all.length, percent: all.length ? Math.round((done.length / all.length) * 100) : 0 };
 }
 
-function goToWeek(week) {
-  if (!week) {
-    return;
+function executedWeekVolume(week) {
+  return week.workouts.reduce((sum, workout) => workout.execution?.done ? sum + Number(workout.execution.distanceKm ?? workout.distanceKm ?? 0) : sum, 0);
+}
+
+function totalExecuted() {
+  return state.weeks.reduce((sum, week) => sum + executedWeekVolume(week), 0);
+}
+
+function totalPlanned() {
+  return state.weeks.reduce((sum, week) => sum + Number(week.targetVolumeKm || 0), 0);
+}
+
+function averagePace() {
+  const paces = state.weeks.flatMap((week) => week.workouts).map((workout) => workout.execution?.pace).filter(Boolean);
+  return paces.at(-1) ?? '6:05/km';
+}
+
+function paceTrend() {
+  return ['6:52', '6:44', '6:38', '6:31', '6:22', '6:15', '6:09', '6:05'].map((pace, index) => ({
+    pace,
+    height: 34 + index * 7,
+  }));
+}
+
+function paceFrom(value) {
+  const match = String(value).match(/\d:\d{2}(?:-\d:\d{2})?/);
+  return match ? `${match[0]}/km` : value;
+}
+
+function estimateDuration(workout) {
+  const km = Number(workout.distanceKm || 0);
+  return km ? `${Math.max(12, Math.round(km * 7))} min` : '15 min';
+}
+
+function loadPercent(week) {
+  const max = Math.max(...state.weeks.map((item) => Number(item.targetVolumeKm || 0)));
+  return Math.round((Number(week.targetVolumeKm || 0) / max) * 100);
+}
+
+function renderSkeleton() {
+  mainContent.innerHTML = `
+    <div class="skeleton-grid">
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+    </div>
+  `;
+}
+
+function persist(options = {}) {
+  localStorage.setItem(storageKey(), JSON.stringify(state));
+  const mode = session && !localMode && authConfig?.persistenceEnabled ? 'nuvem' : 'local';
+  saveStateEl.textContent = `salvo ${mode}`;
+  if (!options.skipRemote) {
+    scheduleRemoteSync();
+    if (!options.silent) showToast('Execução salva');
   }
-  selectedWeek = String(week);
-  renderWeekSelect();
-  renderWeek();
 }
 
-async function resetPlan() {
-  state = await fetchInitialPlan();
-  selectedPhase = 'todas';
-  selectedWeek = '1';
-  persist();
-  render();
+function scheduleRemoteSync() {
+  window.clearTimeout(syncTimer);
+  if (!session || localMode || !authConfig?.persistenceEnabled) return;
+  saveStateEl.textContent = 'sincronizando';
+  syncTimer = window.setTimeout(syncRemote, 700);
+}
+
+async function syncRemote() {
+  try {
+    const response = await fetch('/api/user-plan', {
+      method: 'PUT',
+      headers: { ...authHeaders(), 'content-type': 'application/json' },
+      body: JSON.stringify(state),
+    });
+    if (!response.ok) throw new Error('Falha ao salvar');
+    saveStateEl.textContent = 'salvo nuvem';
+  } catch {
+    saveStateEl.textContent = 'salvo local';
+  }
 }
 
 function exportJson() {
@@ -511,47 +641,18 @@ function exportJson() {
   URL.revokeObjectURL(url);
 }
 
-function persist(options = {}) {
-  localStorage.setItem(storageKey(), JSON.stringify(state));
-  const mode = session && !localMode && authConfig?.persistenceEnabled ? 'nuvem' : 'local';
-  saveStateEl.textContent = `salvo ${mode}`;
-  if (!options.skipRemote) {
-    scheduleRemoteSync();
-  }
-}
-
-function scheduleRemoteSync() {
-  window.clearTimeout(syncTimer);
-  if (!session || localMode || !authConfig?.persistenceEnabled) {
-    return;
-  }
-  saveStateEl.textContent = 'sincronizando';
-  syncTimer = window.setTimeout(syncRemote, 700);
-}
-
-async function syncRemote() {
-  try {
-    const response = await fetch('/api/user-plan', {
-      method: 'PUT',
-      headers: {
-        ...authHeaders(),
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(state),
-    });
-    if (!response.ok) {
-      throw new Error('Falha ao salvar');
-    }
-    saveStateEl.textContent = 'salvo nuvem';
-  } catch {
-    saveStateEl.textContent = 'salvo local';
-  }
+function showToast(message) {
+  toastEl.querySelector('span').textContent = message;
+  toastEl.hidden = false;
+  drawIcons();
+  window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => {
+    toastEl.hidden = true;
+  }, 2200);
 }
 
 function authHeaders() {
-  return {
-    authorization: `Bearer ${session?.access_token ?? ''}`,
-  };
+  return { authorization: `Bearer ${session?.access_token ?? ''}` };
 }
 
 function storageKey() {
@@ -600,43 +701,24 @@ function applyTheme() {
   document.documentElement.dataset.theme = settings.theme;
 }
 
-function labelPhase(value) {
-  const labels = {
-    todas: 'Todas',
-    retorno: 'Retorno',
-    'base forte': 'Base forte',
-    construcao: 'Construcao',
-    especifica: 'Especifica',
-    tapering: 'Taper',
-  };
-  return labels[value] ?? value;
+function round(value) {
+  return Number(value || 0).toFixed(1).replace('.0', '');
 }
 
 function formatDate(value) {
   const date = parseLocalDate(value);
-  if (!date) {
-    return value;
-  }
+  if (!date) return value;
   return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' }).format(date);
 }
 
 function parseLocalDate(value) {
-  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return null;
-  }
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
   const [year, month, day] = value.split('-').map(Number);
   return new Date(year, month - 1, day);
 }
 
 function toIsoDate(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function round(value) {
-  return Number(value || 0).toFixed(1).replace('.0', '');
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
 function escapeHtml(value) {
@@ -653,15 +735,17 @@ function escapeAttr(value) {
 }
 
 function drawIcons() {
-  if (window.lucide) {
-    window.lucide.createIcons();
-  }
+  if (window.lucide) window.lucide.createIcons();
 }
 
-window.goToWeek = goToWeek;
+window.setWeek = (week) => {
+  selectedWeek = String(week);
+  render();
+};
+window.exportJson = exportJson;
 
 boot().catch((error) => {
   console.error(error);
   showApp();
-  weeksEl.innerHTML = '<div class="empty-state">Nao foi possivel carregar o plano.</div>';
+  mainContent.innerHTML = '<div class="empty-state"><div class="empty-illustration"></div><div><h2>Não foi possível carregar</h2><p>Tente atualizar a página.</p></div></div>';
 });

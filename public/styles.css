@@ -8,6 +8,7 @@
   --white: #ffffff;
   --border: #e2e8f0;
   --radius: 8px;
+  --card-radius: 12px;
   --sidebar: 240px;
   --shadow: 0 18px 44px rgba(15, 23, 42, 0.1);
   font-family:
@@ -143,10 +144,11 @@ h3 {
 }
 
 .eyebrow {
-  margin: 0 0 4px;
-  color: var(--lava);
-  font-size: 0.74rem;
-  font-weight: 800;
+  margin: 0;
+  color: var(--slate);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
@@ -209,7 +211,7 @@ textarea:focus {
   align-items: center;
   justify-content: center;
   min-height: 40px;
-  gap: 8px;
+  gap: 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--white);
@@ -243,16 +245,18 @@ textarea:focus {
   display: grid;
   width: var(--sidebar);
   grid-template-rows: auto 1fr auto;
-  gap: 18px;
+  gap: 20px;
   background: #0f172a;
   color: #ffffff;
-  padding: 20px;
+  padding: 0;
 }
 
 .sidebar-brand {
   display: flex;
   align-items: center;
   gap: 12px;
+  padding: 20px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .sidebar-brand strong,
@@ -270,6 +274,13 @@ textarea:focus {
   display: grid;
   align-content: start;
   gap: 8px;
+  padding: 0 16px;
+}
+
+.sidebar-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 16px;
+  padding-bottom: 20px;
 }
 
 .nav-item {
@@ -277,12 +288,33 @@ textarea:focus {
   border-color: transparent;
   background: transparent;
   color: var(--slate);
+  padding: 10px 16px;
+  transition:
+    background 150ms ease,
+    color 150ms ease;
 }
 
-.nav-item.is-active,
+.nav-item.is-active {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
 .nav-item:hover {
-  background: #ffffff;
-  color: #0f172a;
+  background: rgba(255, 255, 255, 0.05);
+  color: #ffffff;
+}
+
+.button.ghost {
+  justify-content: flex-start;
+  border-color: transparent;
+  background: transparent;
+  color: var(--slate);
+  padding: 10px 16px;
+}
+
+.button.ghost:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #ffffff;
 }
 
 .app-main {
@@ -297,16 +329,24 @@ textarea:focus {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
+  height: 64px;
+  gap: 24px;
   border-bottom: 1px solid var(--border);
   background: var(--white);
-  padding: 18px 28px;
+  padding: 0 32px;
 }
 
 .topbar h1 {
   margin: 0;
-  font-size: 1.45rem;
+  color: var(--midnight);
+  font-size: 22px;
   font-weight: 700;
+  line-height: 1.15;
+}
+
+.topbar > div:first-child {
+  display: grid;
+  gap: 2px;
 }
 
 .topbar-actions,
@@ -320,14 +360,13 @@ textarea:focus {
 .inline-fields {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 16px;
 }
 
 .athlete-select {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--cloud);
-  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  padding: 0;
 }
 
 .athlete-select strong,
@@ -339,34 +378,63 @@ textarea:focus {
 .mode-toggle,
 .save-state {
   color: var(--slate);
-  font-size: 0.82rem;
+  font-size: 12px;
+}
+
+.athlete-select .avatar {
+  width: 36px;
+  height: 36px;
+  background: var(--lava);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .mode-toggle {
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--cloud);
-  padding: 9px 10px;
+  background: transparent;
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
 }
 
-.mode-toggle input {
-  width: 18px;
-  min-height: 18px;
+.mode-toggle button {
+  min-height: 32px;
+  border: 0;
+  background: transparent;
+  color: var(--slate);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.mode-toggle button.is-active {
+  background: #0f172a;
+  color: #ffffff;
 }
 
 .save-state {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 9px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  padding: 0;
+}
+
+.save-state svg {
+  width: 14px;
+  height: 14px;
 }
 
 .content-shell {
-  padding: 24px;
+  padding: 28px 32px;
 }
 
 .personal-layout {
   display: grid;
-  gap: 16px;
+  gap: 24px;
 }
 
 .personal-layout {
@@ -377,9 +445,11 @@ textarea:focus {
 .athlete-card,
 .feature-card,
 .week-picker-card,
+.execution-panel,
+.export-card,
 .empty-state {
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--card-radius);
   background: var(--white);
   padding: 20px;
   box-shadow: var(--shadow);
@@ -388,15 +458,16 @@ textarea:focus {
 .card-header {
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 
 .card-header h2,
 .athlete-card h2,
 .feature-card h2 {
   margin-bottom: 3px;
-  font-size: 18px;
-  font-weight: 700;
+  color: var(--midnight);
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .card-header p,
@@ -406,13 +477,13 @@ textarea:focus {
 .empty-state p {
   margin: 0;
   color: var(--slate);
-  font-size: 0.9rem;
+  font-size: 13px;
 }
 
 .metric-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: 16px;
   margin: 16px 0;
 }
 
@@ -422,23 +493,27 @@ textarea:focus {
 
 .mini-metric {
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--card-radius);
   background: var(--cloud);
-  padding: 12px;
+  padding: 20px;
 }
 
 .mini-metric span {
   display: block;
   color: var(--slate);
-  font-size: 0.78rem;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+  text-transform: uppercase;
 }
 
 .mini-metric strong,
 .pace-number {
   display: block;
   color: var(--midnight);
-  font-size: 24px;
-  font-weight: 800;
+  font-size: 26px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
@@ -491,10 +566,10 @@ textarea:focus {
 
 .progress-track,
 .load-bar {
-  height: 9px;
+  height: 6px;
   overflow: hidden;
-  border-radius: 999px;
-  background: var(--cloud);
+  border-radius: 3px;
+  background: var(--border);
 }
 
 .progress-track span,
@@ -502,7 +577,7 @@ textarea:focus {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--pace-green), var(--lava));
+  background: var(--pace-green);
 }
 
 .progress-label {
@@ -521,7 +596,7 @@ textarea:focus {
 .workout-layout,
 .report-layout {
   display: grid;
-  gap: 16px;
+  gap: 24px;
 }
 
 .hero-card {
@@ -595,8 +670,17 @@ textarea:focus {
 }
 
 .workout-layout {
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: 300px minmax(0, 1fr);
   align-items: start;
+  gap: 24px;
+}
+
+.workout-side {
+  display: grid;
+  gap: 24px;
+  min-height: calc(100vh - 120px);
+  border-right: 1px solid var(--border);
+  padding-right: 24px;
 }
 
 .side-metrics {
@@ -610,27 +694,39 @@ textarea:focus {
 
 .workout-list {
   display: grid;
-  gap: 12px;
+  gap: 8px;
 }
 
 .plan-card {
-  display: grid;
-  grid-template-columns: 86px minmax(0, 1fr) minmax(116px, auto) auto;
-  gap: 14px;
+  display: flex;
+  gap: 16px;
   align-items: center;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--card-radius);
   background: var(--white);
-  padding: 14px;
+  min-height: 72px;
+  padding: 16px 20px;
 }
 
 .plan-card.detail {
-  grid-template-columns: 86px minmax(0, 1fr) auto;
-  align-items: start;
+  align-items: center;
 }
 
 .plan-card.is-done {
   background: var(--cloud);
+}
+
+.plan-number {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--lava);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .plan-date {
@@ -649,25 +745,50 @@ textarea:focus {
 .plan-meta span,
 .guidance {
   color: var(--slate);
-  font-size: 0.86rem;
+  font-size: 12px;
 }
 
 .plan-card h3 {
-  margin-bottom: 3px;
-  font-size: 1rem;
-  font-weight: 800;
+  margin-bottom: 2px;
+  color: var(--midnight);
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .plan-card p {
   margin: 0;
   color: var(--slate);
+  max-width: 620px;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .plan-meta {
   display: grid;
+  flex-shrink: 0;
   justify-items: end;
   gap: 2px;
+  margin-left: auto;
   text-align: right;
+}
+
+.plan-meta .target-pace {
+  color: var(--lava);
+  font-family: "SFMono-Regular", "Cascadia Code", "Roboto Mono", monospace;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-meta small {
+  border-radius: 4px;
+  background: var(--cloud);
+  color: var(--slate);
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .plan-metrics {
@@ -692,9 +813,35 @@ textarea:focus {
   text-transform: none;
 }
 
-.done-chip input {
-  width: 16px;
-  min-height: 16px;
+.done-chip input,
+.execution-check input {
+  position: relative;
+  width: 18px;
+  min-height: 18px;
+  appearance: none;
+  border: 2px solid var(--border);
+  border-radius: 4px;
+  background: var(--white);
+  padding: 0;
+}
+
+.done-chip input:checked,
+.execution-check input:checked {
+  border-color: var(--pace-green);
+  background: var(--pace-green);
+}
+
+.done-chip input:checked::after,
+.execution-check input:checked::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  width: 4px;
+  height: 8px;
+  border: solid #ffffff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
 }
 
 .note-list {
@@ -713,152 +860,239 @@ textarea:focus {
   position: sticky;
   top: 96px;
   display: grid;
-  gap: 14px;
+  gap: 12px;
+}
+
+.week-picker-card h2,
+.execution-panel h2 {
+  margin-bottom: 0;
+  color: var(--midnight);
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .week-select {
   color: var(--midnight);
+  min-height: 38px;
+  padding: 8px 12px;
 }
 
-.timeline {
+.execution-panel {
   display: grid;
   gap: 12px;
 }
 
-.timeline-block {
+.execution-card {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) minmax(130px, auto);
-  gap: 14px;
+  gap: 8px;
+  border-top: 1px solid var(--cloud);
+  padding-top: 16px;
+}
+
+.execution-card:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.execution-check {
+  display: flex;
+  flex-direction: row;
   align-items: center;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--white);
-  padding: 14px;
-  text-align: left;
+  gap: 10px;
+  color: var(--midnight);
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: none;
 }
 
-.timeline-block [contenteditable="true"] {
-  border-radius: 4px;
-  outline: none;
+.execution-fields {
+  display: flex;
+  gap: 8px;
 }
 
-.timeline-block [contenteditable="true"]:focus {
-  box-shadow: 0 0 0 3px var(--cloud);
-}
-
-.block-index {
+.execution-fields label,
+.execution-note {
   display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 999px;
-  background: var(--lava);
-  color: #ffffff;
-  font-weight: 800;
-}
-
-.timeline-block strong,
-.timeline-block p,
-.block-data span,
-.block-data b,
-.block-data small {
-  display: block;
-}
-
-.block-data {
-  text-align: right;
-}
-
-.block-data b {
-  color: var(--lava);
-  font-size: 1.3rem;
-}
-
-.block-data span,
-.block-data small {
+  gap: 4px;
   color: var(--slate);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.execution-fields input {
+  height: 36px;
+  min-height: 36px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.execution-fields label:nth-child(1) input {
+  width: 72px;
+}
+
+.execution-fields label:nth-child(2) input,
+.execution-fields label:nth-child(3) input {
+  width: 88px;
+}
+
+.execution-note textarea {
+  width: 100%;
+  min-height: 64px;
+  padding: 8px 10px;
+  font-size: 13px;
 }
 
 .execution-list {
   display: grid;
-  gap: 10px;
-}
-
-.execution-card {
-  display: grid;
-  gap: 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--cloud);
-  padding: 12px;
-}
-
-.done-check {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  color: var(--midnight);
-  text-transform: none;
-}
-
-.done-check input {
-  width: 18px;
-  min-height: 18px;
-}
-
-.inline-fields {
-  align-items: stretch;
+  gap: 16px;
 }
 
 .pace-chart {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  align-items: end;
-  height: 260px;
+  grid-template-columns: 48px minmax(0, 1fr);
+  height: 240px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--card-radius);
   background: var(--cloud);
-  padding: 20px;
-  gap: 10px;
+  padding: 24px;
+  gap: 16px;
 }
 
-.pace-chart span {
-  display: block;
-  min-height: 28px;
-  border-radius: 999px 999px 0 0;
-  background: var(--lava);
-}
-
-.pace-chart i {
-  position: absolute;
-  left: 20px;
-  right: 20px;
-  bottom: 42%;
-  height: 3px;
-  background: var(--pace-green);
-}
-
-.chart-legend {
-  margin-top: 12px;
+.y-axis {
+  display: grid;
+  align-content: space-between;
   color: var(--slate);
+  font-size: 11px;
 }
 
-.lava-dot,
-.green-dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  margin-right: 6px;
+.chart-bars {
+  position: relative;
+  display: flex;
+  align-items: end;
+  gap: 12px;
 }
 
-.lava-dot {
+.goal-line {
+  position: absolute;
+  right: 0;
+  left: 0;
+  bottom: 42%;
+  z-index: 1;
+  border-top: 1.5px dashed var(--pace-green);
+  color: var(--pace-green);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.goal-line span {
+  position: relative;
+  top: -10px;
+  background: var(--cloud);
+  padding-left: 6px;
+}
+
+.bar-item {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  min-width: 42px;
+  flex: 1;
+  justify-items: center;
+  gap: 6px;
+}
+
+.pace-bar {
+  width: 100%;
+  max-width: 44px;
+  border-radius: 8px 8px 0 0;
   background: var(--lava);
 }
 
-.green-dot {
+.pace-bar.goal {
   background: var(--pace-green);
+}
+
+.bar-value {
+  position: absolute;
+  bottom: 28px;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.bar-value.dark {
+  bottom: auto;
+  top: -18px;
+  color: var(--midnight);
+}
+
+.bar-item small {
+  color: var(--slate);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.chart-empty {
+  display: grid;
+  place-items: center;
+  height: 240px;
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  background: var(--cloud);
+  color: var(--slate);
+  font-size: 13px;
+}
+
+.report-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 16px;
+}
+
+.export-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.export-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: var(--cloud);
+  color: var(--lava);
+}
+
+.export-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.export-card h2 {
+  margin-bottom: 2px;
+  color: var(--midnight);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.export-card p {
+  max-width: 440px;
+  margin: 0;
+  color: var(--slate);
+  font-size: 13px;
+}
+
+.export-card .button {
+  margin-left: auto;
+  padding: 8px 16px;
+  font-size: 13px;
 }
 
 .empty-state {
@@ -925,8 +1159,18 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 
+  .workout-side {
+    min-height: 0;
+    border-right: 0;
+    padding-right: 0;
+  }
+
   .week-picker-card {
     position: static;
+  }
+
+  .report-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -947,7 +1191,7 @@ textarea:focus {
 
   .main-nav {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 6px;
   }
 
@@ -975,6 +1219,7 @@ textarea:focus {
   }
 
   .personal-metrics,
+  .report-metrics,
   .skeleton-grid,
   .zones-grid,
   .feature-card .metric-row,
@@ -983,18 +1228,9 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 
-  .timeline-block {
-    grid-template-columns: 34px minmax(0, 1fr);
-  }
-
-  .block-data {
-    grid-column: 2;
-    text-align: left;
-  }
-
-  .inline-fields,
   .quick-actions,
-  .empty-state {
+  .empty-state,
+  .export-card {
     display: grid;
     grid-template-columns: 1fr;
   }
@@ -1013,5 +1249,29 @@ textarea:focus {
 
   .done-chip {
     width: 100%;
+  }
+
+  .execution-fields {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .execution-fields label:nth-child(1) input,
+  .execution-fields label:nth-child(2) input,
+  .execution-fields label:nth-child(3) input {
+    width: 100%;
+  }
+
+  .pace-chart {
+    overflow-x: auto;
+  }
+
+  .chart-bars {
+    min-width: 420px;
+  }
+
+  .export-card .button {
+    width: 100%;
+    margin-left: 0;
   }
 }

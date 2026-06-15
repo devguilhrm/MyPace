@@ -22,7 +22,7 @@ Body: 14-16px, line-height 1.6
 Radius: 8px
 Card padding: 20px
 Sidebar desktop: 240px
-Bottom nav mobile: 3 itens
+Bottom nav mobile: 4 itens
 ```
 
 ## Tela 1: Hoje
@@ -51,6 +51,7 @@ Componentes:
 - Select de semana.
 - Barra de carga baseada no volume planejado.
 - Cards de treino com data, tipo, distancia, pace-alvo, RPE e orientacao.
+- Registro de execucao com checkbox customizado, km, pace, RPE e observacoes.
 - Badge de fase do ciclo.
 
 Estados:
@@ -69,6 +70,17 @@ Componentes:
 - Zonas praticas de pace e RPE.
 - Cenarios de prova.
 - Regras importantes da periodizacao.
+
+## Tela 4: Relatorio
+
+Objetivo: mostrar evolucao real sem dados simulados.
+
+Componentes:
+
+- Grafico de barras apenas com treinos finalizados e pace registrado.
+- Eixo de pace invertido, linha de meta verde e labels de data.
+- Quatro cards tecnicos com pace medio, km finalizados, treinos feitos e RPE medio.
+- Exportacao JSON desabilitada enquanto nao houver treino finalizado.
 
 Mobile:
 

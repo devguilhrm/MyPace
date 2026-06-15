@@ -61,6 +61,10 @@
             <i data-lucide="gauge"></i>
             <span>Ritmos</span>
           </button>
+          <button class="nav-item" data-view="report" type="button">
+            <i data-lucide="bar-chart-3"></i>
+            <span>Relatório</span>
+          </button>
         </nav>
 
         <div class="sidebar-footer">
@@ -90,7 +94,14 @@
                 <span id="currentWeekLabel">Semana atual</span>
               </div>
             </div>
-            <span class="save-state" id="saveState">carregando</span>
+            <div class="mode-toggle" aria-label="Alternar visualização">
+              <button class="is-active" type="button">Coach</button>
+              <button type="button">Atleta</button>
+            </div>
+            <span class="save-state">
+              <i data-lucide="cloud"></i>
+              <span id="saveState">carregando</span>
+            </span>
           </div>
         </header>
 

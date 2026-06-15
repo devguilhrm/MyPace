@@ -217,6 +217,7 @@ function render() {
     dashboard: renderDashboard,
     athlete: renderAthleteProfile,
     workout: renderWorkoutBuilder,
+    report: renderReport,
   };
   mainContent.innerHTML = (renderers[activeView] ?? renderDashboard)();
   drawIcons();
@@ -229,6 +230,7 @@ function renderHeader() {
     dashboard: ['Meu plano', 'Treinos da semana'],
     workout: ['Plano completo', `Semana ${selectedWeek}`],
     athlete: ['Ritmos e regras', 'Referência do ciclo'],
+    report: ['Relatório', 'Evolução real'],
   };
   viewEyebrow.textContent = labels[activeView][0];
   viewTitle.textContent = labels[activeView][1];
@@ -347,21 +349,25 @@ function renderWorkoutBuilder() {
 
   return `
     <section class="workout-layout">
-      <aside class="week-picker-card">
-        <h2>Semana</h2>
-        <select class="week-select" onchange="window.setWeek(this.value)">
-          ${state.weeks.map((item) => `<option value="${item.week}" ${item.week === week.week ? 'selected' : ''}>Semana ${item.week} • ${escapeHtml(item.keyWorkout ?? item.focus)}</option>`).join('')}
-        </select>
-        <div class="load-bar"><span style="width:${loadPercent(week)}%"></span></div>
-        <p>${escapeHtml(week.focus)}</p>
-        <div class="metric-row side-metrics">
-          ${compactMetric('Volume', week.volumeLabel ?? `${week.targetVolumeKm} km`)}
-          ${compactMetric('Longão', week.longRunLabel ?? '-')}
-          ${compactMetric('Feitos', `${completedInWeek}/${week.workouts.length}`)}
-        </div>
+      <aside class="workout-side">
+        <article class="week-picker-card">
+          <h2>Semana de treino</h2>
+          <select class="week-select" onchange="window.setWeek(this.value)">
+            ${state.weeks.map((item) => `<option value="${item.week}" ${item.week === week.week ? 'selected' : ''}>Semana ${item.week} • ${escapeHtml(item.keyWorkout ?? item.focus)}</option>`).join('')}
+          </select>
+          <div class="load-bar"><span style="width:${loadPercent(week)}%"></span></div>
+          <p>${escapeHtml(week.focus)} • ${escapeHtml(week.volumeLabel ?? `${week.targetVolumeKm} km`)} • ${completedInWeek}/${week.workouts.length} feitos</p>
+        </article>
+
+        <article class="execution-panel">
+          <h2>Registro da execução</h2>
+          <div class="execution-list">
+            ${week.workouts.map((workout, workoutIndex) => executionCard(workout, weekIndex, workoutIndex)).join('')}
+          </div>
+        </article>
       </aside>
 
-      <article class="feature-card">
+      <article class="feature-card workout-main">
         <div class="card-header">
           <div>
             <p class="eyebrow">Treinos planejados</p>
@@ -371,7 +377,7 @@ function renderWorkoutBuilder() {
           ${phaseBadge(week.phase)}
         </div>
         <div class="workout-list">
-          ${week.workouts.map((workout) => workoutDetailCard(workout, weekIndex)).join('')}
+          ${week.workouts.map((workout, index) => workoutDetailCard(workout, weekIndex, index)).join('')}
         </div>
       </article>
     </section>
@@ -399,29 +405,45 @@ function workoutSummaryCard(workout, weekIndex) {
   `;
 }
 
-function workoutDetailCard(workout, weekIndex) {
+function workoutDetailCard(workout, weekIndex, index) {
   return `
     <article class="plan-card detail ${workout.execution?.done ? 'is-done' : ''}">
-      <div class="plan-date">
-        <strong>${formatDate(workout.date)}</strong>
-        <span>${escapeHtml(workout.day)}</span>
-      </div>
+      <span class="plan-number">${index + 1}</span>
       <div>
         <div class="card-header compact">
           <div>
             <h3>${escapeHtml(workout.type)}</h3>
-            <p>${escapeHtml(workout.notes)}</p>
+            <p>${escapeHtml(workout.guidance ?? workout.notes)}</p>
           </div>
           ${intensityPill(workout)}
         </div>
-        <div class="metric-row plan-metrics">
-          ${compactMetric('Distância', workout.distanceLabel ?? `${workout.distanceKm} km`)}
-          ${compactMetric('Ritmo-alvo', workout.paceTarget, true)}
-          ${compactMetric('Esforço', `RPE ${workout.effort}`)}
-        </div>
-        <p class="guidance">${escapeHtml(workout.guidance ?? '')}</p>
       </div>
-      ${doneToggle(workout, weekIndex)}
+      <div class="plan-meta">
+        <span>${escapeHtml(estimatedDuration(workout))}</span>
+        <strong class="target-pace">${escapeHtml(paceFrom(workout.paceTarget))}</strong>
+        <small>${escapeHtml(zoneFor(workout))}</small>
+      </div>
+    </article>
+  `;
+}
+
+function executionCard(workout, weekIndex, workoutIndex) {
+  const execution = workout.execution ?? {};
+  return `
+    <article class="execution-card">
+      <label class="execution-check">
+        <input data-week="${weekIndex}" data-workout="${workoutIndex}" data-execution="done" type="checkbox" ${execution.done ? 'checked' : ''} />
+        <span>${escapeHtml(workout.type)}</span>
+      </label>
+      <div class="execution-fields">
+        ${executionInput('Distância', 'km', 'number', weekIndex, workoutIndex, 'distanceKm', execution.distanceKm ?? '', '0.1')}
+        ${executionInput('Pace', 'mm:ss', 'text', weekIndex, workoutIndex, 'pace', execution.pace ?? '')}
+        ${executionInput('Esforço', 'RPE 1-10', 'number', weekIndex, workoutIndex, 'feeling', execution.feeling ?? '', '1')}
+      </div>
+      <label class="execution-note">
+        <span>Observações</span>
+        <textarea data-week="${weekIndex}" data-workout="${workoutIndex}" data-execution="notes" rows="2">${escapeHtml(execution.notes ?? '')}</textarea>
+      </label>
     </article>
   `;
 }
@@ -433,6 +455,78 @@ function doneToggle(workout, weekIndex) {
       <input data-week="${weekIndex}" data-workout="${workoutIndex}" data-execution="done" type="checkbox" ${workout.execution?.done ? 'checked' : ''} />
       <span>${workout.execution?.done ? 'Feito' : 'Pendente'}</span>
     </label>
+  `;
+}
+
+function executionInput(label, placeholder, type, weekIndex, workoutIndex, executionKey, value, step = '') {
+  return `
+    <label>
+      <span>${label}</span>
+      <input data-week="${weekIndex}" data-workout="${workoutIndex}" data-execution="${executionKey}" type="${type}" ${type === 'number' ? 'min="0"' : ''} ${step ? `step="${step}"` : ''} value="${escapeAttr(value)}" placeholder="${placeholder}" />
+    </label>
+  `;
+}
+
+function renderReport() {
+  const finished = finishedWorkouts();
+  const summary = reportSummary(finished);
+  return `
+    <section class="report-layout">
+      <article class="feature-card">
+        <div class="card-header">
+          <div>
+            <p class="eyebrow">Evolução de pace</p>
+            <h2>Treinos finalizados</h2>
+          </div>
+        </div>
+        ${finished.length ? paceChart(finished) : '<div class="chart-empty">Nenhum treino finalizado</div>'}
+      </article>
+
+      <div class="report-metrics">
+        ${compactMetric('Pace médio', summary.averagePace, true)}
+        ${compactMetric('Km finalizados', `${summary.totalKm} km`)}
+        ${compactMetric('Treinos feitos', String(summary.count))}
+        ${compactMetric('RPE médio', summary.averageRpe)}
+      </div>
+
+      <article class="export-card">
+        <div class="export-icon"><i data-lucide="file-text"></i></div>
+        <div>
+          <h2>Relatório exportável</h2>
+          <p>Exporte seu plano com registros de execução, paces finalizados e observações pessoais.</p>
+        </div>
+        <button class="button primary" type="button" onclick="window.exportJson()" ${finished.length ? '' : 'disabled title="Finalize ao menos um treino para exportar um relatório útil"'}>Exportar JSON</button>
+      </article>
+    </section>
+  `;
+}
+
+function paceChart(items) {
+  const paces = items.map((item) => item.paceSeconds);
+  const min = Math.min(...paces);
+  const max = Math.max(...paces);
+  const range = Math.max(1, max - min);
+  const ticks = Array.from({ length: 5 }, (_, index) => formatPace(Math.round(min + (range / 4) * index))).reverse();
+  const meta = 370;
+
+  return `
+    <div class="pace-chart">
+      <div class="y-axis">${ticks.map((tick) => `<span>${tick}</span>`).join('')}</div>
+      <div class="chart-bars">
+        <div class="goal-line"><span>Meta</span></div>
+        ${items.map((item) => {
+          const height = 28 + Math.round(((max - item.paceSeconds) / range) * 172);
+          const isGoal = item.paceSeconds <= meta;
+          return `
+            <div class="bar-item">
+              <span class="bar-value ${height < 56 ? 'dark' : ''}">${escapeHtml(item.execution.pace)}</span>
+              <div class="pace-bar ${isGoal ? 'goal' : ''}" style="height:${height}px"></div>
+              <small>${formatDateShort(item.date)}</small>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
   `;
 }
 
@@ -471,6 +565,52 @@ function completedWorkouts() {
 function paceFrom(value) {
   const match = String(value).match(/\d:\d{2}(?:-\d:\d{2})?/);
   return match ? `${match[0]}/km` : value;
+}
+
+function zoneFor(workout) {
+  if (workout.distanceKm === 0) return 'Descanso';
+  if (workout.effort >= 8) return 'Z4';
+  if (workout.effort >= 6) return 'Z3';
+  if (workout.effort >= 3) return 'Z2';
+  return 'Z1';
+}
+
+function estimatedDuration(workout) {
+  if (!workout.distanceKm) return 'recuperação';
+  const seconds = parsePaceToSeconds(paceFrom(workout.paceTarget)) ?? 420;
+  const minutes = Math.round((seconds * workout.distanceKm) / 60);
+  return `${minutes} min`;
+}
+
+function finishedWorkouts() {
+  return state.weeks
+    .flatMap((week) => week.workouts)
+    .filter((workout) => workout.execution?.done && parsePaceToSeconds(workout.execution?.pace) && workout.distanceKm > 0)
+    .map((workout) => ({ ...workout, paceSeconds: parsePaceToSeconds(workout.execution.pace) }));
+}
+
+function reportSummary(items) {
+  const count = items.length;
+  if (!count) return { averagePace: '-', totalKm: '0', count: 0, averageRpe: '-' };
+  const totalKm = items.reduce((sum, item) => sum + Number(item.execution.distanceKm ?? item.distanceKm ?? 0), 0);
+  const avgPace = Math.round(items.reduce((sum, item) => sum + item.paceSeconds, 0) / count);
+  const rpes = items.map((item) => Number(item.execution.feeling || 0)).filter(Boolean);
+  const averageRpe = rpes.length ? (rpes.reduce((sum, value) => sum + value, 0) / rpes.length).toFixed(1) : '-';
+  return { averagePace: `${formatPace(avgPace)}/km`, totalKm: round(totalKm), count, averageRpe };
+}
+
+function parsePaceToSeconds(value) {
+  const match = String(value ?? '').match(/(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function formatPace(seconds) {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
+function round(value) {
+  return Number(value || 0).toFixed(1).replace('.0', '');
 }
 
 function loadPercent(week) {
@@ -595,6 +735,12 @@ function formatDate(value) {
   return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' }).format(date);
 }
 
+function formatDateShort(value) {
+  const date = parseLocalDate(value);
+  if (!date) return value;
+  return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(date).replace('.', '');
+}
+
 function parseLocalDate(value) {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
   const [year, month, day] = value.split('-').map(Number);
@@ -612,6 +758,10 @@ function escapeHtml(value) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value).replaceAll('\n', ' ');
 }
 
 function drawIcons() {

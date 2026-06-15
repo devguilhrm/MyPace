@@ -24,6 +24,7 @@ export class SupabaseService {
   publicConfig() {
     return {
       authEnabled: Boolean(this.url && this.anonKey),
+      authRequired: true,
       supabaseUrl: this.url,
       supabaseAnonKey: this.anonKey,
       persistenceEnabled: Boolean(this.url && this.serviceRoleKey),
@@ -31,11 +32,12 @@ export class SupabaseService {
   }
 
   async getUserPlan(authorization: string | undefined) {
+    const user = await this.requireUser(authorization);
+
     if (!this.isPersistenceReady()) {
       return null;
     }
 
-    const user = await this.requireUser(authorization);
     const response = await fetch(
       `${this.url}/rest/v1/training_plans?user_id=eq.${encodeURIComponent(user.id)}&select=plan,updated_at&limit=1`,
       {
@@ -52,11 +54,12 @@ export class SupabaseService {
   }
 
   async saveUserPlan(authorization: string | undefined, plan: TrainingPlan) {
+    const user = await this.requireUser(authorization);
+
     if (!this.isPersistenceReady()) {
       return { saved: false, reason: 'supabase_not_configured' };
     }
 
-    const user = await this.requireUser(authorization);
     const response = await fetch(`${this.url}/rest/v1/training_plans?on_conflict=user_id`, {
       method: 'POST',
       headers: {
@@ -79,35 +82,13 @@ export class SupabaseService {
   }
 
   async identifyUser(authorization: string | undefined) {
-    if (!this.url || !this.anonKey || !authorization) {
-      return null;
-    }
-
-    const token = authorization.replace(/^Bearer\s+/i, '').trim();
-    if (!token) return null;
-
-    const response = await fetch(`${this.url}/auth/v1/user`, {
-      headers: {
-        apikey: this.anonKey,
-        authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (!response.ok) return null;
-
-    const user = (await response.json()) as SupabaseUserResponse;
-    return {
-      id: user.id ?? '',
-      email: user.email ?? '',
-      username: user.user_metadata?.username ?? '',
-      displayName: user.user_metadata?.display_name ?? '',
-    };
+    return this.requireUser(authorization);
   }
 
-  private async requireUser(authorization: string | undefined) {
+  async requireUser(authorization: string | undefined) {
     const token = authorization?.replace(/^Bearer\s+/i, '').trim();
     if (!this.url || !this.anonKey || !token) {
-      throw new UnauthorizedException('Login necessario.');
+      throw new UnauthorizedException('Login necessario. Configure Supabase e informe um token valido.');
     }
 
     const response = await fetch(`${this.url}/auth/v1/user`, {
@@ -126,7 +107,12 @@ export class SupabaseService {
       throw new UnauthorizedException('Sessao invalida.');
     }
 
-    return { id: user.id, email: user.email ?? '' };
+    return {
+      id: user.id,
+      email: user.email ?? '',
+      username: user.user_metadata?.username ?? '',
+      displayName: user.user_metadata?.display_name ?? '',
+    };
   }
 
   private serviceHeaders() {

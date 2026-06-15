@@ -70,20 +70,20 @@ async function boot() {
     session = result.data.session;
     supabaseClient.auth.onAuthStateChange((_event, nextSession) => {
       session = nextSession;
+      if (!session && !isEntryRoute() && !isLoginRoute()) {
+        state = null;
+        navigateToLogin();
+      }
     });
     localMode = !session;
   } else {
-    localMode = true;
+    localMode = false;
   }
   resolveAuthReady();
 
   if (isLoginRoute()) {
-    if (!authConfig?.authEnabled) {
-      navigateTo('/hoje');
-      return;
-    }
     if (session) navigateTo(nextPathFromLogin());
-    else showLogin();
+    else showLogin(authConfig?.authEnabled ? '' : 'Login indisponivel. Configure Supabase para acessar.');
     return;
   }
 
@@ -112,7 +112,7 @@ async function fetchConfig() {
     if (!response.ok) throw new Error('Config indisponivel');
     return response.json();
   } catch {
-    return { authEnabled: false, persistenceEnabled: false, supabaseUrl: '', supabaseAnonKey: '' };
+    return { authEnabled: false, authRequired: true, persistenceEnabled: false, supabaseUrl: '', supabaseAnonKey: '' };
   }
 }
 
@@ -169,8 +169,8 @@ async function logout() {
   if (supabaseClient && session && !localMode) await supabaseClient.auth.signOut();
   session = null;
   state = null;
-  localMode = true;
-  navigateTo(authConfig?.authEnabled ? LOGIN_PATH : '/');
+  localMode = false;
+  navigateTo(LOGIN_PATH);
 }
 
 async function startApp() {
@@ -271,7 +271,7 @@ function handleClick(event) {
     const { action: name } = action.dataset;
 
     if (name === 'enter-app') {
-      navigateTo('/hoje');
+      navigateTo(session ? '/hoje' : LOGIN_PATH);
       return;
     }
 
@@ -330,12 +330,8 @@ async function handleRouteChange() {
   }
 
   if (isLoginRoute()) {
-    if (!authConfig?.authEnabled) {
-      navigateTo('/hoje');
-      return;
-    }
     if (session) navigateTo(nextPathFromLogin());
-    else showLogin();
+    else showLogin(authConfig?.authEnabled ? '' : 'Login indisponivel. Configure Supabase para acessar.');
     return;
   }
 
@@ -1914,13 +1910,13 @@ function showEntry() {
   drawIcons();
 }
 
-function showLogin() {
+function showLogin(message = '') {
   entryView.hidden = true;
   loginView.hidden = false;
   appView.hidden = true;
   document.body.dataset.route = 'login';
   document.title = 'MyPace | Login';
-  setAuthMessage('');
+  setAuthMessage(message);
   drawIcons();
 }
 
@@ -1940,7 +1936,7 @@ function viewFromPath() {
 }
 
 function requiresLogin() {
-  return Boolean(authConfig?.authEnabled && !session);
+  return !session;
 }
 
 function navigateToLogin() {

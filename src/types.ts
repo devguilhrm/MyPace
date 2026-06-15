@@ -39,17 +39,25 @@ export interface WorkoutExecution {
   distanceKm?: number;
   pace?: string;
   feeling?: number;
+  executedAt?: string;
   notes?: string;
 }
 
+export type WorkoutStatus = 'pendente' | 'finalizado';
+
 export interface Workout {
   id: string;
+  week: number;
+  order: number;
   date: string;
   day: string;
   type: WorkoutType;
+  status: WorkoutStatus;
   distanceKm: number;
   distanceLabel?: string;
   paceTarget: string;
+  zone: 'Z1' | 'Z2' | 'Z3' | 'Z4' | 'Z5' | 'Descanso';
+  durationMinutes: number;
   effort: number;
   notes: string;
   guidance?: string;

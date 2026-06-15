@@ -533,7 +533,8 @@ textarea:focus {
 }
 
 .status-badge,
-.intensity-pill {
+.intensity-pill,
+.finish-badge {
   border-radius: 999px;
   padding: 5px 9px;
   font-size: 0.76rem;
@@ -562,6 +563,12 @@ textarea:focus {
 .intensity-pill.moderate {
   background: var(--slate);
   color: #0f172a;
+}
+
+.finish-badge {
+  background: var(--pace-green);
+  color: #0f172a;
+  white-space: nowrap;
 }
 
 .progress-track,

@@ -1,6 +1,6 @@
 const STORAGE_KEY = 'mypace:guilherme:v6';
 const SETTINGS_KEY = 'mypace:settings:v2';
-const PLAN_VERSION = '5.0.0';
+const PLAN_VERSION = '5.1.0';
 
 let state = null;
 let settings = loadSettings();
@@ -196,7 +196,25 @@ function handleInput(event) {
 
   const workout = state.weeks[Number(target.dataset.week)].workouts[Number(target.dataset.workout)];
   workout.execution ??= { done: false };
+  workout.status ??= workout.execution.done ? 'finalizado' : 'pendente';
+
+  if (target.type === 'checkbox' && target.checked && !canFinalizeWorkout(workout)) {
+    target.checked = false;
+    showToast(workout.distanceKm > 0 ? 'Preencha km, pace e RPE antes de finalizar' : 'Informe RPE antes de finalizar o descanso');
+    return;
+  }
+
   workout.execution[target.dataset.execution] = readInputValue(target);
+  if (target.type === 'checkbox') {
+    workout.status = target.checked ? 'finalizado' : 'pendente';
+    workout.execution.done = target.checked;
+    workout.execution.executedAt = target.checked ? toIsoDate(new Date()) : undefined;
+  } else if (workout.status === 'finalizado' && !canFinalizeWorkout(workout)) {
+    workout.status = 'pendente';
+    workout.execution.done = false;
+    workout.execution.executedAt = undefined;
+    showToast('Treino voltou para pendente: dados reais incompletos');
+  }
   persist();
   if (target.type === 'checkbox') {
     render();
@@ -212,6 +230,7 @@ function readInputValue(target) {
 }
 
 function render() {
+  normalizePlanState();
   renderHeader();
   const renderers = {
     dashboard: renderDashboard,
@@ -386,8 +405,9 @@ function renderWorkoutBuilder() {
 
 function workoutSummaryCard(workout, weekIndex) {
   const isRest = Number(workout.distanceKm || 0) === 0;
+  const isFinished = isWorkoutFinished(workout);
   return `
-    <article class="plan-card ${workout.execution?.done ? 'is-done' : ''}">
+    <article class="plan-card ${isFinished ? 'is-done' : ''}">
       <div class="plan-date">
         <strong>${formatDate(workout.date)}</strong>
         <span>${escapeHtml(workout.day)}</span>
@@ -400,14 +420,16 @@ function workoutSummaryCard(workout, weekIndex) {
         <strong>${escapeHtml(workout.distanceLabel ?? `${workout.distanceKm} km`)}</strong>
         <span>${isRest ? 'recuperação' : escapeHtml(paceFrom(workout.paceTarget))}</span>
       </div>
+      ${isFinished ? '<span class="finish-badge">Finalizado</span>' : ''}
       ${doneToggle(workout, weekIndex)}
     </article>
   `;
 }
 
 function workoutDetailCard(workout, weekIndex, index) {
+  const isFinished = isWorkoutFinished(workout);
   return `
-    <article class="plan-card detail ${workout.execution?.done ? 'is-done' : ''}">
+    <article class="plan-card detail ${isFinished ? 'is-done' : ''}">
       <span class="plan-number">${index + 1}</span>
       <div>
         <div class="card-header compact">
@@ -419,20 +441,22 @@ function workoutDetailCard(workout, weekIndex, index) {
         </div>
       </div>
       <div class="plan-meta">
-        <span>${escapeHtml(estimatedDuration(workout))}</span>
+        <span>${escapeHtml(formatDuration(workout))}</span>
         <strong class="target-pace">${escapeHtml(paceFrom(workout.paceTarget))}</strong>
-        <small>${escapeHtml(zoneFor(workout))}</small>
+        <small>${escapeHtml(workout.zone ?? zoneFor(workout))}</small>
       </div>
+      ${isFinished ? '<span class="finish-badge">Finalizado</span>' : ''}
     </article>
   `;
 }
 
 function executionCard(workout, weekIndex, workoutIndex) {
   const execution = workout.execution ?? {};
+  const isFinished = isWorkoutFinished(workout);
   return `
     <article class="execution-card">
       <label class="execution-check">
-        <input data-week="${weekIndex}" data-workout="${workoutIndex}" data-execution="done" type="checkbox" ${execution.done ? 'checked' : ''} />
+        <input data-week="${weekIndex}" data-workout="${workoutIndex}" data-execution="done" type="checkbox" ${isFinished ? 'checked' : ''} />
         <span>${escapeHtml(workout.type)}</span>
       </label>
       <div class="execution-fields">
@@ -450,10 +474,11 @@ function executionCard(workout, weekIndex, workoutIndex) {
 
 function doneToggle(workout, weekIndex) {
   const workoutIndex = state.weeks[weekIndex].workouts.findIndex((item) => item.id === workout.id);
+  const isFinished = isWorkoutFinished(workout);
   return `
     <label class="done-chip">
-      <input data-week="${weekIndex}" data-workout="${workoutIndex}" data-execution="done" type="checkbox" ${workout.execution?.done ? 'checked' : ''} />
-      <span>${workout.execution?.done ? 'Feito' : 'Pendente'}</span>
+      <input data-week="${weekIndex}" data-workout="${workoutIndex}" data-execution="done" type="checkbox" ${isFinished ? 'checked' : ''} />
+      <span>${isFinished ? 'Finalizado' : 'Pendente'}</span>
     </label>
   `;
 }
@@ -484,9 +509,9 @@ function renderReport() {
 
       <div class="report-metrics">
         ${compactMetric('Pace médio', summary.averagePace, true)}
-        ${compactMetric('Km finalizados', `${summary.totalKm} km`)}
-        ${compactMetric('Treinos feitos', String(summary.count))}
-        ${compactMetric('RPE médio', summary.averageRpe)}
+        ${compactMetric('Volume total', summary.totalKm)}
+        ${compactMetric('PR provável', summary.probablePr)}
+        ${compactMetric('Carga', summary.load)}
       </div>
 
       <article class="export-card">
@@ -521,7 +546,7 @@ function paceChart(items) {
             <div class="bar-item">
               <span class="bar-value ${height < 56 ? 'dark' : ''}">${escapeHtml(item.execution.pace)}</span>
               <div class="pace-bar ${isGoal ? 'goal' : ''}" style="height:${height}px"></div>
-              <small>${formatDateShort(item.date)}</small>
+              <small>${escapeHtml(item.chartLabel)}</small>
             </div>
           `;
         }).join('')}
@@ -535,7 +560,7 @@ function phaseBadge(phase) {
 }
 
 function remainingWorkouts(week) {
-  return week.workouts.filter((workout) => !workout.execution?.done && workout.distanceKm > 0);
+  return week.workouts.filter((workout) => !isWorkoutFinished(workout) && workout.distanceKm > 0);
 }
 
 function compactMetric(label, value, mono = false) {
@@ -549,16 +574,16 @@ function intensityPill(workout) {
 }
 
 function currentWeek() {
-  return state.weeks.find((week) => week.workouts.some((workout) => !workout.execution?.done && workout.distanceKm > 0)) ?? state.weeks.at(-1);
+  return state.weeks.find((week) => week.workouts.some((workout) => !isWorkoutFinished(workout) && workout.distanceKm > 0)) ?? state.weeks.at(-1);
 }
 
 function nextWorkout() {
-  return state.weeks.flatMap((week) => week.workouts).find((workout) => !workout.execution?.done && workout.distanceKm > 0);
+  return state.weeks.flatMap((week) => week.workouts).find((workout) => !isWorkoutFinished(workout) && workout.distanceKm > 0);
 }
 
 function completedWorkouts() {
   const all = state.weeks.flatMap((week) => week.workouts).filter((workout) => workout.distanceKm > 0);
-  const done = all.filter((workout) => workout.execution?.done);
+  const done = all.filter(isWorkoutFinished);
   return { done: done.length, total: all.length, percent: all.length ? Math.round((done.length / all.length) * 100) : 0 };
 }
 
@@ -582,21 +607,84 @@ function estimatedDuration(workout) {
   return `${minutes} min`;
 }
 
+function formatDuration(workout) {
+  if (Number(workout.durationMinutes) > 0) return `${workout.durationMinutes} min`;
+  return estimatedDuration(workout);
+}
+
 function finishedWorkouts() {
-  return state.weeks
-    .flatMap((week) => week.workouts)
-    .filter((workout) => workout.execution?.done && parsePaceToSeconds(workout.execution?.pace) && workout.distanceKm > 0)
+  const items = state.weeks
+    .flatMap((week) => week.workouts.map((workout) => ({ ...workout, weekNumber: week.week })))
+    .filter((workout) =>
+      workout.status === 'finalizado'
+      && workout.distanceKm > 0
+      && Number(workout.execution?.distanceKm || 0) > 0
+      && parsePaceToSeconds(workout.execution?.pace)
+      && validRpe(workout.execution?.feeling)
+      && workout.execution?.executedAt
+    )
     .map((workout) => ({ ...workout, paceSeconds: parsePaceToSeconds(workout.execution.pace) }));
+  return withDistinctChartLabels(items);
+}
+
+function withDistinctChartLabels(items) {
+  const seen = new Map();
+  return items.map((item) => {
+    const base = formatDateShort(item.execution.executedAt);
+    const count = (seen.get(base) ?? 0) + 1;
+    seen.set(base, count);
+    return { ...item, chartLabel: count > 1 ? `${base} #${count}` : base };
+  });
 }
 
 function reportSummary(items) {
   const count = items.length;
-  if (!count) return { averagePace: '-', totalKm: '0', count: 0, averageRpe: '-' };
-  const totalKm = items.reduce((sum, item) => sum + Number(item.execution.distanceKm ?? item.distanceKm ?? 0), 0);
+  if (!count) return { averagePace: '-', totalKm: '-', probablePr: '-', load: '-' };
+  const totalKm = items.reduce((sum, item) => sum + Number(item.execution.distanceKm || 0), 0);
   const avgPace = Math.round(items.reduce((sum, item) => sum + item.paceSeconds, 0) / count);
-  const rpes = items.map((item) => Number(item.execution.feeling || 0)).filter(Boolean);
-  const averageRpe = rpes.length ? (rpes.reduce((sum, value) => sum + value, 0) / rpes.length).toFixed(1) : '-';
-  return { averagePace: `${formatPace(avgPace)}/km`, totalKm: round(totalKm), count, averageRpe };
+  const bestPace = Math.min(...items.map((item) => item.paceSeconds));
+  return {
+    averagePace: `${formatPace(avgPace)}/km`,
+    totalKm: `${round(totalKm)} km`,
+    probablePr: estimateHalfMarathonTime(bestPace),
+    load: classifyWeekLoad(items.at(-1)?.weekNumber),
+  };
+}
+
+function classifyWeekLoad(weekNumber) {
+  const week = state.weeks.find((item) => item.week === weekNumber);
+  if (!week) return '-';
+  const realVolume = week.workouts
+    .filter((workout) => workout.status === 'finalizado')
+    .reduce((sum, workout) => sum + Number(workout.execution?.distanceKm || 0), 0);
+  if (realVolume === 0) return '-';
+  if (realVolume < 16) return 'baixa';
+  if (realVolume <= 32) return 'média';
+  return 'alta';
+}
+
+function estimateHalfMarathonTime(secondsPerKm) {
+  const totalSeconds = Math.round(secondsPerKm * 21.1);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  return `${hours}h${String(minutes).padStart(2, '0')}`;
+}
+
+function isWorkoutFinished(workout) {
+  return workout.status === 'finalizado';
+}
+
+function canFinalizeWorkout(workout) {
+  const execution = workout.execution ?? {};
+  if (Number(workout.distanceKm || 0) === 0) return validRpe(execution.feeling);
+  return Number(execution.distanceKm || 0) > 0
+    && Boolean(parsePaceToSeconds(execution.pace))
+    && validRpe(execution.feeling);
+}
+
+function validRpe(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 1 && number <= 10;
 }
 
 function parsePaceToSeconds(value) {
@@ -626,6 +714,21 @@ function renderSkeleton() {
       <div class="skeleton-card"></div>
     </div>
   `;
+}
+
+function normalizePlanState() {
+  if (!state?.weeks) return;
+  state.weeks.forEach((week, weekIndex) => {
+    week.workouts.forEach((workout, workoutIndex) => {
+      workout.week ??= week.week ?? weekIndex + 1;
+      workout.order ??= workoutIndex + 1;
+      workout.status = workout.status === 'finalizado' ? 'finalizado' : 'pendente';
+      workout.zone ??= zoneFor(workout);
+      workout.durationMinutes ??= Number.parseInt(estimatedDuration(workout), 10) || 0;
+      workout.execution ??= { done: false };
+      workout.execution.done = workout.status === 'finalizado';
+    });
+  });
 }
 
 function persist(options = {}) {
@@ -660,7 +763,25 @@ async function syncRemote() {
 }
 
 function exportJson() {
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    athlete: state.athlete.name,
+    workouts: finishedWorkouts().map((workout) => ({
+      id: workout.id,
+      week: workout.weekNumber,
+      order: workout.order,
+      date_planned: workout.date,
+      data_execucao: workout.execution.executedAt,
+      title: workout.type,
+      status: workout.status,
+      km_real: Number(workout.execution.distanceKm || 0),
+      pace_real: workout.execution.pace,
+      rpe_real: Number(workout.execution.feeling),
+      observacoes: workout.execution.notes ?? '',
+    })),
+  };
+  if (!payload.workouts.length) return;
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;

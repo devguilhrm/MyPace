@@ -55,7 +55,7 @@ Resposta resumida:
 
 ```json
 {
-  "schemaVersion": "5.0.0",
+  "schemaVersion": "5.1.0",
   "athlete": {
     "name": "Guilherme"
   },
@@ -64,7 +64,24 @@ Resposta resumida:
     "weeks": 20,
     "targetRaceDistanceKm": 21.1
   },
-  "weeks": []
+  "weeks": [
+    {
+      "week": 1,
+      "workouts": [
+        {
+          "id": "w1-1-corrida-facil-z2-",
+          "week": 1,
+          "order": 1,
+          "status": "pendente",
+          "type": "Corrida facil (Z2)",
+          "zone": "Z2",
+          "durationMinutes": 21,
+          "distanceKm": 3,
+          "paceTarget": "6:55-7:20/km"
+        }
+      ]
+    }
+  ]
 }
 ```
 
@@ -83,7 +100,7 @@ Resposta quando existe plano salvo:
 ```json
 {
   "plan": {
-    "schemaVersion": "5.0.0"
+    "schemaVersion": "5.1.0"
   },
   "updated_at": "2026-06-14T23:31:45.123Z"
 }
@@ -114,7 +131,7 @@ Body:
 
 ```json
 {
-  "schemaVersion": "5.0.0",
+  "schemaVersion": "5.1.0",
   "weeks": []
 }
 ```

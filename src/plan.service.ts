@@ -54,7 +54,7 @@ export class PlanService {
     };
 
     return {
-      schemaVersion: '5.0.0',
+      schemaVersion: '5.1.0',
       athlete,
       planMeta: {
         generatedAt: new Date().toISOString(),
@@ -136,8 +136,8 @@ export class PlanService {
         volumeLabel: template.volumeLabel,
         longRunLabel: template.longRunLabel,
         keyWorkout: template.keyWorkout,
-        workouts: template.workouts.map((workout) =>
-          this.workout(index + 1, weekStart, workout),
+        workouts: template.workouts.map((workout, workoutIndex) =>
+          this.workout(index + 1, workoutIndex + 1, weekStart, workout),
         ),
       };
     });
@@ -300,7 +300,7 @@ export class PlanService {
       type: 'Descanso completo',
       distanceKm: 0,
       distanceLabel: '0 km',
-      paceTarget: '-',
+      paceTarget: 'solto',
       effort: 1,
       notes,
       guidance,
@@ -309,6 +309,7 @@ export class PlanService {
 
   private workout(
     week: number,
+    order: number,
     weekStart: Date,
     planned: PlannedWorkout,
   ): Workout {
@@ -316,12 +317,17 @@ export class PlanService {
 
     return {
       id: `w${week}-${planned.offsetDays}-${planned.type.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+      week,
+      order,
       date: this.formatDate(date),
       day: this.weekday(date),
       type: planned.type,
+      status: 'pendente',
       distanceKm: planned.distanceKm,
       distanceLabel: planned.distanceLabel ?? `${planned.distanceKm} km`,
-      paceTarget: planned.paceTarget,
+      paceTarget: this.paceTarget(planned),
+      zone: this.zoneFor(planned),
+      durationMinutes: this.durationMinutes(planned),
       effort: planned.effort,
       notes: planned.notes,
       guidance: planned.guidance,
@@ -329,6 +335,26 @@ export class PlanService {
         done: false,
       },
     };
+  }
+
+  private zoneFor(planned: PlannedWorkout): Workout['zone'] {
+    if (planned.distanceKm === 0) return 'Descanso';
+    if (planned.effort >= 9) return 'Z5';
+    if (planned.effort >= 7) return 'Z4';
+    if (planned.effort >= 5) return 'Z3';
+    if (planned.effort >= 3) return 'Z2';
+    return 'Z1';
+  }
+
+  private paceTarget(planned: PlannedWorkout): string {
+    return /\d{1,2}:\d{2}/.test(planned.paceTarget) ? planned.paceTarget : 'solto';
+  }
+
+  private durationMinutes(planned: PlannedWorkout): number {
+    if (planned.distanceKm === 0) return 0;
+    const pace = planned.paceTarget.match(/(\d{1,2}):(\d{2})/);
+    const secondsPerKm = pace ? Number(pace[1]) * 60 + Number(pace[2]) : 420;
+    return Math.max(10, Math.round((secondsPerKm * planned.distanceKm) / 60));
   }
 
   private parseDate(value: string): Date {

@@ -55,15 +55,11 @@
           </button>
           <button class="nav-item" data-view="workout" type="button">
             <i data-lucide="list-checks"></i>
-            <span>Plano</span>
-          </button>
-          <button class="nav-item" data-view="athlete" type="button">
-            <i data-lucide="gauge"></i>
-            <span>Ritmos</span>
+            <span>Semana</span>
           </button>
           <button class="nav-item" data-view="report" type="button">
             <i data-lucide="bar-chart-3"></i>
-            <span>Relatório</span>
+            <span>Evolução</span>
           </button>
         </nav>
 
@@ -83,7 +79,7 @@
         <header class="topbar">
           <div>
             <p class="eyebrow" id="viewEyebrow">Meu plano</p>
-            <h1 id="viewTitle">Treinos da semana</h1>
+            <h1 id="viewTitle">Treino do dia</h1>
           </div>
 
           <div class="topbar-actions">
@@ -93,10 +89,6 @@
                 <strong id="selectedAthleteName">Guilherme</strong>
                 <span id="currentWeekLabel">Semana atual</span>
               </div>
-            </div>
-            <div class="mode-toggle" aria-label="Alternar visualização">
-              <button class="is-active" type="button">Coach</button>
-              <button type="button">Atleta</button>
             </div>
             <span class="save-state">
               <i data-lucide="cloud"></i>
@@ -117,6 +109,15 @@
       <div class="toast" id="toast" hidden>
         <i data-lucide="check-circle-2"></i>
         <span>Salvo</span>
+      </div>
+
+      <div class="modal-backdrop" id="registrationModal" hidden>
+        <section class="quick-modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+          <button class="icon-button modal-close" id="modalCloseBtn" type="button" aria-label="Fechar">
+            <i data-lucide="x"></i>
+          </button>
+          <div id="modalContent"></div>
+        </section>
       </div>
     </div>
   </body>

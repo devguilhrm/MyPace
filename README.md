@@ -2,30 +2,28 @@
 
 MyPace e um MVP pessoal para consultar a periodizacao de corrida do Guilherme em uma interface simples, privada e pronta para deploy.
 
-O foco do projeto e direto: entrar, ver o proximo treino, consultar a semana atual, navegar pelas 20 semanas do ciclo, registrar execucao e revisar ritmos/regras importantes da preparacao para meia maratona.
+O foco do projeto e direto: entrar, ver o treino de hoje, registrar execucao em poucos campos e acompanhar a evolucao real de pace ao longo da periodizacao.
 
 ## O Que O App Faz
 
 - Login privado com Supabase Auth.
 - Consulta da periodizacao gerada a partir do plano `periodizacao_meia_maratona_guilherme_com_ritmos.md`.
-- Tela `Hoje` com proximo treino, semana atual e comentarios importantes.
-- Tela `Plano` com todas as semanas, treinos, paces, distancias, RPE e orientacoes.
-- Tela `Ritmos` com zonas de pace, cenarios de prova e regras do ciclo.
-- Tela `Relatório` com métricas e gráfico usando somente treinos finalizados.
-- Persistencia simples para marcar treinos como feitos e registrar km, pace, RPE e observacoes.
+- Tela `Hoje` detecta automaticamente o treino pela data atual.
+- Tela `Semana` lista os treinos da semana com status visual.
+- Tela `Evolução` mostra progresso, cards tecnicos e grafico usando somente treinos finalizados.
+- Registro rapido com km real, pace real, RPE e observacao opcional.
 
 ## Fluxo
 
 ```mermaid
 flowchart LR
   Login[Login privado] --> Hoje[Hoje: proximo treino]
-  Hoje --> Plano[Plano: 20 semanas]
-  Plano --> Treino[Treino planejado]
-  Treino --> Relatorio[Relatorio real]
-  Hoje --> Ritmos[Ritmos e regras]
-  Treino --> Supabase[(Supabase)]
-  Relatorio --> Supabase
-  Ritmos --> API[NestJS API]
+  Hoje --> Semana[Semana atual]
+  Semana --> Registro[Registro rapido]
+  Registro --> Evolucao[Evolucao real]
+  Registro --> Supabase[(Supabase)]
+  Evolucao --> Supabase
+  Semana --> API[NestJS API]
   API --> PlanoBase[Periodizacao no backend]
 ```
 

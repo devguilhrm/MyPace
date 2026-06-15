@@ -351,7 +351,6 @@ textarea:focus {
 
 .topbar-actions,
 .athlete-select,
-.mode-toggle,
 .card-header,
 .profile-hero,
 .progress-label,
@@ -375,7 +374,6 @@ textarea:focus {
 }
 
 .athlete-select span,
-.mode-toggle,
 .save-state {
   color: var(--slate);
   font-size: 12px;
@@ -388,31 +386,6 @@ textarea:focus {
   color: #ffffff;
   font-size: 13px;
   font-weight: 600;
-}
-
-.mode-toggle {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: transparent;
-  gap: 0;
-  overflow: hidden;
-  padding: 0;
-}
-
-.mode-toggle button {
-  min-height: 32px;
-  border: 0;
-  background: transparent;
-  color: var(--slate);
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.mode-toggle button.is-active {
-  background: #0f172a;
-  color: #ffffff;
 }
 
 .save-state {
@@ -569,6 +542,307 @@ textarea:focus {
   background: var(--pace-green);
   color: #0f172a;
   white-space: nowrap;
+}
+
+.today-layout,
+.week-layout {
+  display: grid;
+  max-width: 980px;
+  margin: 0 auto;
+  gap: 24px;
+}
+
+.today-card,
+.next-session-card {
+  display: grid;
+  gap: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  background: var(--white);
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+
+.today-card {
+  border-top: 5px solid var(--lava);
+}
+
+.today-card.is-done {
+  border-top-color: var(--pace-green);
+}
+
+.today-card-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.today-card h2 {
+  margin: 0;
+  color: var(--midnight);
+  font-size: 26px;
+  font-weight: 800;
+}
+
+.today-card p,
+.next-session-card p {
+  max-width: 680px;
+  margin: 0;
+  color: var(--slate);
+  font-size: 14px;
+}
+
+.today-pace {
+  color: var(--lava);
+  font-family: "SFMono-Regular", "Cascadia Code", "Roboto Mono", monospace;
+  font-size: 36px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.today-meta,
+.result-summary,
+.week-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.today-action {
+  width: 100%;
+  min-height: 48px;
+  font-size: 15px;
+}
+
+.button.secondary {
+  border-color: var(--border);
+  background: var(--cloud);
+  color: var(--midnight);
+}
+
+.button.confirm {
+  width: 100%;
+  min-height: 48px;
+  border-color: var(--pace-green);
+  background: var(--pace-green);
+  color: #0f172a;
+}
+
+.week-layout .week-picker-card {
+  position: static;
+  grid-template-columns: minmax(0, 1fr) 320px minmax(220px, auto);
+  align-items: center;
+}
+
+.week-list {
+  display: grid;
+  gap: 12px;
+}
+
+.week-workout {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) minmax(120px, auto) auto;
+  gap: 16px;
+  align-items: center;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  background: var(--white);
+  padding: 16px 20px;
+  text-align: left;
+  box-shadow: var(--shadow);
+}
+
+.week-workout.done {
+  opacity: 0.72;
+}
+
+.week-workout.missed {
+  background: var(--cloud);
+}
+
+.status-symbol {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--cloud);
+  color: var(--slate);
+  font-weight: 800;
+}
+
+.week-workout.done .status-symbol {
+  background: var(--pace-green);
+  color: #0f172a;
+}
+
+.week-workout.missed .status-symbol {
+  background: var(--slate);
+  color: #ffffff;
+}
+
+.week-workout strong,
+.next-session-card h3 {
+  display: block;
+  margin: 0;
+  color: var(--midnight);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.week-workout p {
+  margin: 0;
+  overflow: hidden;
+  color: var(--slate);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.week-workout-meta {
+  display: grid;
+  justify-items: end;
+  text-align: right;
+}
+
+.week-workout-meta b {
+  color: var(--lava);
+  font-family: "SFMono-Regular", "Cascadia Code", "Roboto Mono", monospace;
+  font-size: 15px;
+}
+
+.week-workout-meta span,
+.status-pill {
+  color: var(--slate);
+  font-size: 12px;
+}
+
+.status-pill {
+  border-radius: 999px;
+  background: var(--cloud);
+  padding: 5px 9px;
+  font-weight: 800;
+}
+
+.status-pill.done {
+  background: var(--pace-green);
+  color: #0f172a;
+}
+
+.status-pill.missed {
+  background: var(--slate);
+  color: #ffffff;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  background: rgba(15, 23, 42, 0.48);
+  padding: 20px;
+}
+
+.quick-modal {
+  position: relative;
+  width: min(520px, 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  background: var(--white);
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+
+.icon-button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--white);
+  color: var(--midnight);
+}
+
+.modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}
+
+.quick-register {
+  display: grid;
+  gap: 16px;
+}
+
+.quick-register h2 {
+  margin: 0;
+  color: var(--midnight);
+  font-size: 22px;
+}
+
+.quick-register p {
+  margin: 0;
+  color: var(--slate);
+}
+
+.quick-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.quick-fields.rest-only {
+  grid-template-columns: 1fr;
+}
+
+.unit-input {
+  position: relative;
+}
+
+.unit-input input {
+  padding-right: 36px;
+}
+
+.unit-input b {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  color: var(--slate);
+  font-size: 12px;
+  transform: translateY(-50%);
+}
+
+.rpe-field {
+  grid-column: 1 / -1;
+}
+
+.rpe-field input {
+  accent-color: var(--lava);
+}
+
+.rpe-field div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rpe-field small {
+  color: var(--slate);
+  font-size: 12px;
+  text-transform: none;
+}
+
+.rpe-field strong {
+  color: var(--lava);
+  font-size: 18px;
+}
+
+.quick-note textarea {
+  min-height: 72px;
 }
 
 .progress-track,
@@ -1198,7 +1472,7 @@ textarea:focus {
 
   .main-nav {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
   }
 
@@ -1244,7 +1518,13 @@ textarea:focus {
 
   .hero-card,
   .plan-card,
-  .plan-card.detail {
+  .plan-card.detail,
+  .week-layout .week-picker-card,
+  .week-workout,
+  .today-meta,
+  .result-summary,
+  .week-summary,
+  .quick-fields {
     display: grid;
     grid-template-columns: 1fr;
   }
@@ -1256,6 +1536,17 @@ textarea:focus {
 
   .done-chip {
     width: 100%;
+  }
+
+  .today-card-header,
+  .week-workout-meta {
+    display: grid;
+    justify-items: start;
+    text-align: left;
+  }
+
+  .today-pace {
+    font-size: 30px;
   }
 
   .execution-fields {

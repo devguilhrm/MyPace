@@ -12,6 +12,7 @@ let authConfig = null;
 let supabaseClient = null;
 let session = null;
 let localMode = false;
+let modalContext = null;
 
 const authView = document.querySelector('#authView');
 const appView = document.querySelector('#appView');
@@ -29,6 +30,9 @@ const currentWeekLabel = document.querySelector('#currentWeekLabel');
 const selectedAthleteName = document.querySelector('#selectedAthleteName');
 const selectedAvatar = document.querySelector('#selectedAvatar');
 const toastEl = document.querySelector('#toast');
+const registrationModal = document.querySelector('#registrationModal');
+const modalContent = document.querySelector('#modalContent');
+const modalCloseBtn = document.querySelector('#modalCloseBtn');
 
 applyTheme();
 
@@ -59,10 +63,15 @@ function bindEvents() {
   loginForm.addEventListener('submit', signIn);
   themeToggleBtn.addEventListener('click', toggleTheme);
   logoutBtn.addEventListener('click', logout);
+  modalCloseBtn.addEventListener('click', closeRegistrationModal);
+  registrationModal.addEventListener('click', (event) => {
+    if (event.target === registrationModal) closeRegistrationModal();
+  });
 
   document.body.addEventListener('click', handleClick);
   document.body.addEventListener('input', handleInput);
   document.body.addEventListener('change', handleInput);
+  document.body.addEventListener('submit', handleSubmit);
 }
 
 async function fetchConfig() {
@@ -127,7 +136,7 @@ async function startApp() {
   showApp();
   renderSkeleton();
   state = await loadPlan();
-  selectedWeek = String(currentWeek()?.week ?? 1);
+  selectedWeek = String(todayWeek()?.week ?? currentWeek()?.week ?? 1);
   persist({ skipRemote: true, silent: true });
   render();
 }
@@ -169,6 +178,12 @@ async function fetchInitialPlan() {
 }
 
 function handleClick(event) {
+  const action = event.target.closest('[data-action]');
+  if (action?.dataset.action === 'open-register') {
+    openRegistrationModal(Number(action.dataset.week), Number(action.dataset.workout));
+    return;
+  }
+
   const nav = event.target.closest('[data-view]');
   if (nav) {
     activeView = nav.dataset.view;
@@ -189,9 +204,19 @@ function handleClick(event) {
   }
 }
 
+function handleSubmit(event) {
+  if (event.target.id !== 'quickRegisterForm') return;
+  event.preventDefault();
+  confirmQuickRegistration(new FormData(event.target));
+}
+
 function handleInput(event) {
   const target = event.target;
   if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement)) return;
+  if (target.name === 'feeling') {
+    document.querySelector('#rpeValue').textContent = target.value;
+    return;
+  }
   if (!target.dataset.week || !target.dataset.workout || !target.dataset.execution) return;
 
   const workout = state.weeks[Number(target.dataset.week)].workouts[Number(target.dataset.workout)];
@@ -234,7 +259,6 @@ function render() {
   renderHeader();
   const renderers = {
     dashboard: renderDashboard,
-    athlete: renderAthleteProfile,
     workout: renderWorkoutBuilder,
     report: renderReport,
   };
@@ -246,10 +270,9 @@ function renderHeader() {
   const athlete = state?.athlete?.name ?? 'Guilherme';
   const week = currentWeek();
   const labels = {
-    dashboard: ['Meu plano', 'Treinos da semana'],
-    workout: ['Plano completo', `Semana ${selectedWeek}`],
-    athlete: ['Ritmos e regras', 'Referência do ciclo'],
-    report: ['Relatório', 'Evolução real'],
+    dashboard: ['Hoje', 'Treino do dia'],
+    workout: ['Semana', `Semana ${selectedWeek}`],
+    report: ['Evolução', 'Pace e consistência'],
   };
   viewEyebrow.textContent = labels[activeView][0];
   viewTitle.textContent = labels[activeView][1];
@@ -259,104 +282,53 @@ function renderHeader() {
 }
 
 function renderDashboard() {
-  const week = currentWeek();
-  const next = nextWorkout();
+  const today = todayWorkout();
+  const next = nextWorkoutFromDate(toIsoDate(new Date()));
+  const workout = today?.workout;
+  const weekIndex = today?.weekIndex ?? (next?.weekIndex ?? 0);
+  const workoutIndex = today?.workoutIndex ?? (next?.workoutIndex ?? 0);
   const completed = completedWorkouts();
-  const remaining = remainingWorkouts(week);
+
+  if (!workout) {
+    return `
+      <section class="today-layout">
+        <article class="today-card rest-card">
+          <p class="eyebrow">Hoje</p>
+          <h2>Descanso ativo</h2>
+          <p>Não há treino agendado para hoje. Use o dia para recuperar, dormir bem e chegar inteiro na próxima sessão.</p>
+          ${next ? nextSessionCard(next) : ''}
+        </article>
+        ${cycleProgressCard(completed)}
+      </section>
+    `;
+  }
+
+  const isFinished = isWorkoutFinished(workout);
+  const isRest = Number(workout.distanceKm || 0) === 0;
   return `
-    <section class="personal-layout">
-      <article class="feature-card midnight-card hero-card">
-        <div>
-          <p class="eyebrow lava-text">Próximo treino</p>
-          <h2>${next ? escapeHtml(next.type) : 'Ciclo concluído'}</h2>
-          <p>${next ? `${formatDate(next.date)} • ${escapeHtml(next.day)} • ${escapeHtml(next.distanceLabel ?? `${next.distanceKm} km`)}` : 'Todos os treinos planejados foram concluídos.'}</p>
-        </div>
-        <strong class="pace-number">${next ? escapeHtml(paceFrom(next.paceTarget)) : '21,1 km'}</strong>
-      </article>
-
-      <div class="metric-row personal-metrics">
-        ${compactMetric('Semana', `S${week.week}`)}
-        ${compactMetric('Volume planejado', week.volumeLabel ?? `${week.targetVolumeKm} km`)}
-        ${compactMetric('Treinos restantes', String(remaining.length))}
-        ${compactMetric('Ciclo concluído', `${completed.percent}%`)}
-      </div>
-
-      <article class="feature-card">
-        <div class="card-header">
+    <section class="today-layout">
+      <article class="today-card ${isFinished ? 'is-done' : ''}">
+        <div class="today-card-header">
           <div>
-            <p class="eyebrow">Semana atual</p>
-            <h2>${escapeHtml(week.focus)}</h2>
-            <p>${escapeHtml(week.phase)} • Longão ${escapeHtml(week.longRunLabel ?? '-')}</p>
+            <p class="eyebrow">${isRest ? 'Descanso ativo' : 'Treino de hoje'}</p>
+            <h2>${escapeHtml(workout.type)}</h2>
           </div>
-          ${phaseBadge(week.phase)}
+          ${isFinished ? '<span class="finish-badge">Concluído</span>' : ''}
         </div>
-        <div class="workout-list">
-          ${week.workouts.map((workout) => workoutSummaryCard(workout, state.weeks.indexOf(week))).join('')}
+        <p>${escapeHtml(workout.guidance ?? workout.notes)}</p>
+        <strong class="today-pace">${isRest ? 'solto' : escapeHtml(paceFrom(workout.paceTarget))}</strong>
+        <div class="today-meta">
+          ${compactMetric('Duração', formatDuration(workout))}
+          ${compactMetric('Volume', workout.distanceLabel ?? `${workout.distanceKm} km`)}
+          ${compactMetric('Semana', `S${state.weeks[weekIndex].week}`)}
         </div>
+        ${isFinished ? workoutResultSummary(workout) : ''}
+        <button class="button ${isFinished ? 'secondary' : 'primary'} today-action" data-action="open-register" data-week="${weekIndex}" data-workout="${workoutIndex}" type="button">
+          <i data-lucide="${isFinished ? 'clipboard-list' : 'plus-circle'}"></i>
+          <span>${isFinished ? 'Ver registro' : isRest ? 'Registrar descanso' : 'Registrar treino'}</span>
+        </button>
       </article>
-
-      <article class="feature-card">
-        <h2>Comentários do plano</h2>
-        <div class="note-list">
-          ${state.planMeta.methodology.slice(0, 4).map((item) => `<p>${escapeHtml(item)}</p>`).join('')}
-        </div>
-      </article>
-    </section>
-  `;
-}
-
-function renderAthleteProfile() {
-  return `
-    <section class="personal-layout">
-      <article class="feature-card">
-        <div class="card-header">
-          <div>
-            <p class="eyebrow">Objetivo</p>
-            <h2>${escapeHtml(state.athlete.objective)}</h2>
-            <p>${escapeHtml(state.athlete.originalObjectiveText)}</p>
-          </div>
-        </div>
-        <div class="metric-row personal-metrics">
-          ${compactMetric('Disponibilidade', `${state.athlete.availabilityDays} dias`)}
-          ${compactMetric('Distância-alvo', `${state.planMeta.targetRaceDistanceKm} km`)}
-          ${compactMetric('Início', formatDate(state.planMeta.startDate))}
-          ${compactMetric('Prova', formatDate(state.athlete.assumedRaceDate))}
-        </div>
-      </article>
-
-      <article class="feature-card">
-        <h2>Zonas práticas</h2>
-        <div class="zones-grid">
-          ${(state.planMeta.paceZones ?? []).map((zone) => `
-            <div class="zone-item">
-              <strong>${escapeHtml(zone.name)}</strong>
-              <span>${escapeHtml(zone.pace)}</span>
-              <small>RPE ${escapeHtml(zone.rpe)}</small>
-            </div>
-          `).join('')}
-        </div>
-      </article>
-
-      <article class="feature-card">
-        <h2>Cenários de prova</h2>
-        <div class="zones-grid">
-          ${(state.planMeta.raceScenarios ?? []).map((scenario) => `
-            <div class="zone-item">
-              <strong>${escapeHtml(scenario.name)}</strong>
-              <span>${escapeHtml(scenario.pace)}</span>
-              <small>${escapeHtml(scenario.time)}</small>
-            </div>
-          `).join('')}
-        </div>
-      </article>
-
-      <article class="feature-card">
-        <h2>Regras importantes</h2>
-        <div class="note-list">
-          <p>${escapeHtml(state.athlete.restrictions)}</p>
-          ${state.planMeta.methodology.map((item) => `<p>${escapeHtml(item)}</p>`).join('')}
-        </div>
-      </article>
+      ${!isRest ? cycleProgressCard(completed) : next ? nextSessionCard(next) : cycleProgressCard(completed)}
     </section>
   `;
 }
@@ -364,42 +336,50 @@ function renderAthleteProfile() {
 function renderWorkoutBuilder() {
   const week = state.weeks.find((item) => String(item.week) === selectedWeek) ?? currentWeek();
   const weekIndex = state.weeks.indexOf(week);
-  const completedInWeek = week.workouts.filter((workout) => workout.execution?.done).length;
+  const completedInWeek = week.workouts.filter(isWorkoutFinished).length;
 
   return `
-    <section class="workout-layout">
-      <aside class="workout-side">
-        <article class="week-picker-card">
+    <section class="week-layout">
+      <article class="week-picker-card">
+        <div>
           <h2>Semana de treino</h2>
+          <p>${escapeHtml(week.focus)} • ${escapeHtml(week.volumeLabel ?? `${week.targetVolumeKm} km`)}</p>
+        </div>
+        <div>
           <select class="week-select" onchange="window.setWeek(this.value)">
             ${state.weeks.map((item) => `<option value="${item.week}" ${item.week === week.week ? 'selected' : ''}>Semana ${item.week} • ${escapeHtml(item.keyWorkout ?? item.focus)}</option>`).join('')}
           </select>
           <div class="load-bar"><span style="width:${loadPercent(week)}%"></span></div>
-          <p>${escapeHtml(week.focus)} • ${escapeHtml(week.volumeLabel ?? `${week.targetVolumeKm} km`)} • ${completedInWeek}/${week.workouts.length} feitos</p>
-        </article>
-
-        <article class="execution-panel">
-          <h2>Registro da execução</h2>
-          <div class="execution-list">
-            ${week.workouts.map((workout, workoutIndex) => executionCard(workout, weekIndex, workoutIndex)).join('')}
-          </div>
-        </article>
-      </aside>
-
-      <article class="feature-card workout-main">
-        <div class="card-header">
-          <div>
-            <p class="eyebrow">Treinos planejados</p>
-            <h2>${escapeHtml(week.phase)} • Semana ${week.week}</h2>
-            <p>${escapeHtml(week.focus)}</p>
-          </div>
-          ${phaseBadge(week.phase)}
         </div>
-        <div class="workout-list">
-          ${week.workouts.map((workout, index) => workoutDetailCard(workout, weekIndex, index)).join('')}
+        <div class="week-summary">
+          ${compactMetric('Concluídos', `${completedInWeek}/${week.workouts.length}`)}
+          ${compactMetric('Longão', week.longRunLabel ?? '-')}
         </div>
       </article>
+
+      <div class="week-list">
+        ${week.workouts.map((workout, workoutIndex) => weekWorkoutCard(workout, weekIndex, workoutIndex)).join('')}
+      </div>
     </section>
+  `;
+}
+
+function weekWorkoutCard(workout, weekIndex, workoutIndex) {
+  const status = workoutVisualStatus(workout);
+  const isFinished = isWorkoutFinished(workout);
+  return `
+    <button class="week-workout ${status.className}" data-action="open-register" data-week="${weekIndex}" data-workout="${workoutIndex}" type="button">
+      <span class="status-symbol">${status.symbol}</span>
+      <div>
+        <strong>${escapeHtml(workout.type)}</strong>
+        <p>${formatDate(workout.date)} • ${escapeHtml(workout.guidance ?? workout.notes)}</p>
+      </div>
+      <div class="week-workout-meta">
+        <b>${escapeHtml(paceFrom(workout.paceTarget))}</b>
+        <span>${escapeHtml(workout.distanceLabel ?? `${workout.distanceKm} km`)}</span>
+      </div>
+      <span class="status-pill ${status.className}">${isFinished ? 'Concluído' : status.label}</span>
+    </button>
   `;
 }
 
@@ -492,11 +472,116 @@ function executionInput(label, placeholder, type, weekIndex, workoutIndex, execu
   `;
 }
 
+function openRegistrationModal(weekIndex, workoutIndex) {
+  const workout = state.weeks[weekIndex]?.workouts[workoutIndex];
+  if (!workout) return;
+  modalContext = { weekIndex, workoutIndex };
+  modalContent.innerHTML = isWorkoutFinished(workout) ? registrationSummary(workout) : registrationForm(workout);
+  registrationModal.hidden = false;
+  drawIcons();
+}
+
+function closeRegistrationModal() {
+  modalContext = null;
+  registrationModal.hidden = true;
+  modalContent.innerHTML = '';
+}
+
+function registrationForm(workout) {
+  const execution = workout.execution ?? {};
+  const isRest = Number(workout.distanceKm || 0) === 0;
+  return `
+    <form id="quickRegisterForm" class="quick-register">
+      <p class="eyebrow">${isRest ? 'Registrar descanso' : 'Registrar treino'}</p>
+      <h2 id="modalTitle">${escapeHtml(workout.type)}</h2>
+      <p>${escapeHtml(workout.guidance ?? workout.notes)}</p>
+      <div class="quick-fields ${isRest ? 'rest-only' : ''}">
+        ${isRest ? '' : `
+          <label>
+            <span>Distância real</span>
+            <div class="unit-input">
+              <input name="distanceKm" type="number" min="0" step="0.01" value="${escapeAttr(execution.distanceKm ?? '')}" required />
+              <b>km</b>
+            </div>
+          </label>
+          <label>
+            <span>Pace médio real</span>
+            <input name="pace" type="text" inputmode="numeric" pattern="\\d{1,2}:\\d{2}" placeholder="mm:ss" value="${escapeAttr(execution.pace ?? '')}" required />
+          </label>
+        `}
+        <label class="rpe-field">
+          <span>Esforço percebido</span>
+          <input name="feeling" type="range" min="1" max="10" step="1" value="${escapeAttr(execution.feeling ?? 5)}" />
+          <div><small>Fácil</small><strong id="rpeValue">${escapeHtml(execution.feeling ?? 5)}</strong><small>Máximo</small></div>
+        </label>
+      </div>
+      <label class="quick-note">
+        <span>Observação</span>
+        <textarea name="notes" rows="3">${escapeHtml(execution.notes ?? '')}</textarea>
+      </label>
+      <button class="button confirm" type="submit">
+        <i data-lucide="check-circle-2"></i>
+        <span>Confirmar treino</span>
+      </button>
+    </form>
+  `;
+}
+
+function registrationSummary(workout) {
+  return `
+    <div class="quick-register">
+      <p class="eyebrow">Registro concluído</p>
+      <h2 id="modalTitle">${escapeHtml(workout.type)}</h2>
+      ${workoutResultSummary(workout)}
+      ${workout.execution?.notes ? `<p>${escapeHtml(workout.execution.notes)}</p>` : '<p>Sem observações registradas.</p>'}
+      <button class="button secondary" type="button" onclick="window.closeQuickRegister()">
+        <i data-lucide="check"></i>
+        <span>Fechar</span>
+      </button>
+    </div>
+  `;
+}
+
+function confirmQuickRegistration(formData) {
+  if (!modalContext) return;
+  const workout = state.weeks[modalContext.weekIndex].workouts[modalContext.workoutIndex];
+  const isRest = Number(workout.distanceKm || 0) === 0;
+  workout.execution ??= { done: false };
+  workout.execution.distanceKm = isRest ? 0 : Number(formData.get('distanceKm'));
+  workout.execution.pace = isRest ? undefined : normalizePaceInput(String(formData.get('pace') ?? ''));
+  workout.execution.feeling = Number(formData.get('feeling'));
+  workout.execution.notes = String(formData.get('notes') ?? '').trim();
+
+  if (!canFinalizeWorkout(workout)) {
+    showToast(isRest ? 'Informe o esforço percebido' : 'Confira km, pace e RPE');
+    return;
+  }
+
+  workout.status = 'finalizado';
+  workout.execution.done = true;
+  workout.execution.executedAt = toIsoDate(new Date());
+  persist();
+  closeRegistrationModal();
+  render();
+  showToast('Treino confirmado');
+}
+
+function normalizePaceInput(value) {
+  const digits = value.replace(/\D/g, '');
+  if (/^\d{3,4}$/.test(digits)) {
+    return `${digits.slice(0, -2)}:${digits.slice(-2)}`;
+  }
+  return value;
+}
+
 function renderReport() {
   const finished = finishedWorkouts();
   const summary = reportSummary(finished);
+  const completed = completedWorkouts();
   return `
     <section class="report-layout">
+      ${cycleProgressCard(completed)}
+
       <article class="feature-card">
         <div class="card-header">
           <div>
@@ -585,6 +670,75 @@ function completedWorkouts() {
   const all = state.weeks.flatMap((week) => week.workouts).filter((workout) => workout.distanceKm > 0);
   const done = all.filter(isWorkoutFinished);
   return { done: done.length, total: all.length, percent: all.length ? Math.round((done.length / all.length) * 100) : 0 };
+}
+
+function todayWeek() {
+  const today = toIsoDate(new Date());
+  return state.weeks.find((week) => week.workouts.some((workout) => workout.date === today));
+}
+
+function todayWorkout() {
+  return workoutByDate(toIsoDate(new Date()));
+}
+
+function workoutByDate(date) {
+  for (const [weekIndex, week] of state.weeks.entries()) {
+    const workoutIndex = week.workouts.findIndex((workout) => workout.date === date);
+    if (workoutIndex >= 0) return { week, weekIndex, workoutIndex, workout: week.workouts[workoutIndex] };
+  }
+  return null;
+}
+
+function nextWorkoutFromDate(date) {
+  const items = state.weeks.flatMap((week, weekIndex) =>
+    week.workouts.map((workout, workoutIndex) => ({ week, weekIndex, workoutIndex, workout })),
+  );
+  return items.find((item) => item.workout.date >= date && !isWorkoutFinished(item.workout) && item.workout.distanceKm > 0)
+    ?? items.find((item) => !isWorkoutFinished(item.workout) && item.workout.distanceKm > 0)
+    ?? null;
+}
+
+function workoutVisualStatus(workout) {
+  if (isWorkoutFinished(workout)) return { className: 'done', symbol: '✓', label: 'Concluído' };
+  if (workout.date < toIsoDate(new Date())) return { className: 'missed', symbol: '✕', label: 'Pendente passado' };
+  return { className: 'pending', symbol: '○', label: 'Pendente' };
+}
+
+function nextSessionCard(item) {
+  return `
+    <article class="next-session-card">
+      <p class="eyebrow">Próxima sessão</p>
+      <h3>${escapeHtml(item.workout.type)}</h3>
+      <p>${formatDate(item.workout.date)} • ${escapeHtml(item.workout.distanceLabel ?? `${item.workout.distanceKm} km`)} • ${escapeHtml(paceFrom(item.workout.paceTarget))}</p>
+      <button class="button primary" data-action="open-register" data-week="${item.weekIndex}" data-workout="${item.workoutIndex}" type="button">
+        <i data-lucide="plus-circle"></i>
+        <span>Registrar quando fizer</span>
+      </button>
+    </article>
+  `;
+}
+
+function cycleProgressCard(completed) {
+  return `
+    <article class="feature-card progress-card">
+      <div class="progress-label">
+        <span>Periodização completa</span>
+        <strong>${completed.done} de ${completed.total} — ${completed.percent}%</strong>
+      </div>
+      <div class="progress-track"><span style="width:${completed.percent}%"></span></div>
+    </article>
+  `;
+}
+
+function workoutResultSummary(workout) {
+  const execution = workout.execution ?? {};
+  return `
+    <div class="result-summary">
+      ${compactMetric('Km real', execution.distanceKm ? `${execution.distanceKm} km` : '-')}
+      ${compactMetric('Pace real', execution.pace ? `${execution.pace}/km` : '-', true)}
+      ${compactMetric('RPE', execution.feeling ?? '-')}
+    </div>
+  `;
 }
 
 function paceFrom(value) {
@@ -722,10 +876,14 @@ function normalizePlanState() {
     week.workouts.forEach((workout, workoutIndex) => {
       workout.week ??= week.week ?? weekIndex + 1;
       workout.order ??= workoutIndex + 1;
-      workout.status = workout.status === 'finalizado' ? 'finalizado' : 'pendente';
       workout.zone ??= zoneFor(workout);
       workout.durationMinutes ??= Number.parseInt(estimatedDuration(workout), 10) || 0;
       workout.execution ??= { done: false };
+      if (!workout.status && workout.execution.done && canFinalizeWorkout(workout)) {
+        workout.status = 'finalizado';
+        workout.execution.executedAt ??= workout.date;
+      }
+      workout.status = workout.status === 'finalizado' ? 'finalizado' : 'pendente';
       workout.execution.done = workout.status === 'finalizado';
     });
   });
@@ -894,6 +1052,7 @@ window.setWeek = (week) => {
   render();
 };
 window.exportJson = exportJson;
+window.closeQuickRegister = closeRegistrationModal;
 
 boot().catch((error) => {
   console.error(error);

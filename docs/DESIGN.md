@@ -22,56 +22,45 @@ Body: 14-16px, line-height 1.6
 Radius: 8px
 Card padding: 20px
 Sidebar desktop: 240px
-Bottom nav mobile: 4 itens
+Bottom nav mobile: 3 itens
 ```
 
 ## Tela 1: Hoje
 
-Objetivo: responder rapidamente "qual e meu proximo treino?".
+Objetivo: responder rapidamente "qual e o treino de hoje?".
 
 Componentes:
 
-- Card principal Midnight com proximo treino, data, distancia e pace-alvo.
-- Quatro metricas: semana, volume planejado, treinos restantes e conclusao do ciclo.
-- Lista dos treinos da semana atual.
-- Comentarios principais importados do plano.
+- Card principal com treino do dia detectado pela data atual.
+- Pace alvo em Lava, duracao e volume estimados.
+- Botao primario full-width para abrir registro rapido.
+- Dia sem treino mostra descanso ativo e a proxima sessao.
 
 Estados:
 
 - Skeleton cards no carregamento.
-- Checkbox simples para marcar treino como feito.
+- Treino concluido mostra resumo e badge Concluido.
 - Toast verde apos salvar.
 
-## Tela 2: Plano
+## Tela 2: Semana
 
-Objetivo: consultar a periodizacao completa, semana por semana.
+Objetivo: consultar a semana atual e registrar rapidamente qualquer treino pendente.
 
 Componentes:
 
 - Select de semana.
-- Barra de carga baseada no volume planejado.
-- Cards de treino com data, tipo, distancia, pace-alvo, RPE e orientacao.
-- Registro de execucao com checkbox customizado, km, pace, RPE e observacoes.
-- Badge de fase do ciclo.
+- Lista vertical dos treinos da semana.
+- Status visual: concluido, pendente e pendente passado.
+- Clique em pendente abre modal de registro.
+- Clique em concluido abre resumo somente leitura.
 
 Estados:
 
 - Semana selecionada preservada na navegacao.
 - Treino feito recebe superficie Cloud.
-- Sem edicao inline de treino planejado.
+- Sem edicao inline do treino planejado.
 
-## Tela 3: Ritmos
-
-Objetivo: manter as referencias tecnicas sempre visiveis.
-
-Componentes:
-
-- Objetivo do ciclo.
-- Zonas praticas de pace e RPE.
-- Cenarios de prova.
-- Regras importantes da periodizacao.
-
-## Tela 4: Relatorio
+## Tela 3: Evolucao
 
 Objetivo: mostrar evolucao real sem dados simulados.
 
@@ -79,7 +68,8 @@ Componentes:
 
 - Grafico de barras apenas com treinos finalizados e pace registrado.
 - Eixo de pace invertido, linha de meta verde e labels de data.
-- Quatro cards tecnicos com pace medio, km finalizados, treinos feitos e RPE medio.
+- Progresso total concluido vs planejado.
+- Quatro cards tecnicos com pace medio, volume real, PR provavel e carga.
 - Exportacao JSON desabilitada enquanto nao houver treino finalizado.
 
 Mobile:

@@ -12,6 +12,7 @@ let toastTimer = null;
 let authConfig = null;
 let supabaseClient = null;
 let session = null;
+let currentUser = null;
 let localMode = false;
 let modalContext = null;
 let preparationFilters = { week: 'all', phase: 'all', type: 'all', status: 'all' };
@@ -173,6 +174,7 @@ async function signIn(event) {
 async function logout() {
   if (supabaseClient && session && !localMode) await supabaseClient.auth.signOut();
   session = null;
+  currentUser = null;
   state = null;
   localMode = false;
   navigateTo(LOGIN_PATH);
@@ -187,6 +189,7 @@ async function startApp() {
   activeView = viewFromPath();
   showApp();
   renderSkeleton();
+  currentUser = await loadCurrentUser();
   state ??= await loadPlan();
   normalizePlanState();
   selectedWeek = String(weekForDate(toIsoDate(new Date()))?.week ?? currentWeek()?.week ?? 1);
@@ -199,6 +202,23 @@ async function loadPlan() {
   if (saved?.schemaVersion === PLAN_VERSION) return saved;
   if (saved?.weeks?.length) return migrateSavedPlan(saved);
   return fetchInitialPlan();
+}
+
+async function loadCurrentUser() {
+  if (!session || localMode) return null;
+  try {
+    const response = await fetch('/api/me', { headers: authHeaders() });
+    if (!response.ok) throw new Error('Perfil indisponivel');
+    return response.json();
+  } catch {
+    return {
+      id: session.user?.id ?? '',
+      email: session.user?.email ?? '',
+      username: session.user?.user_metadata?.username ?? '',
+      displayName: session.user?.user_metadata?.display_name ?? '',
+      role: 'user',
+    };
+  }
 }
 
 async function loadSavedPlan() {
@@ -244,6 +264,7 @@ function knownPlanKeys() {
 async function migrateSavedPlan(saved) {
   const initial = await fetchInitialPlan();
   mergeExecutions(initial, saved);
+  initial.extraWorkouts = saved.extraWorkouts ?? [];
   initial.schemaVersion = PLAN_VERSION;
   return initial;
 }
@@ -292,6 +313,16 @@ function handleClick(event) {
 
     if (name === 'view-register') {
       openRegistrationModal(Number(action.dataset.week), Number(action.dataset.workout), false);
+      return;
+    }
+
+    if (name === 'open-extra-register') {
+      openExtraRegistrationModal();
+      return;
+    }
+
+    if (name === 'edit-extra-register') {
+      openExtraRegistrationModal(Number(action.dataset.extra));
       return;
     }
 
@@ -372,6 +403,11 @@ function handleSubmit(event) {
     event.preventDefault();
     saveRunnerSettings(new FormData(event.target));
   }
+
+  if (event.target.id === 'coachWorkoutForm') {
+    event.preventDefault();
+    saveCoachWorkout(event.target);
+  }
 }
 
 function handleInput(event) {
@@ -389,7 +425,7 @@ function handleInput(event) {
     target.value = sanitizeDurationInput(target.value);
   }
 
-  if (target.name === 'distance') {
+  if (target.name === 'distance' || target.name === 'distanceKm') {
     target.value = maskDistance(target.value);
   }
 
@@ -426,10 +462,10 @@ function handleFocusOut(event) {
     updateAutoPace(target.closest('form'));
   }
 
-  if (target.name === 'distance') {
+  if (target.name === 'distance' || target.name === 'distanceKm') {
     const distance = parseDistanceInput(target.value);
     if (Number.isFinite(distance)) target.value = formatDistanceInput(distance);
-    updateAutoPace(target.closest('form'));
+    if (target.name === 'distance') updateAutoPace(target.closest('form'));
   }
 }
 
@@ -493,6 +529,10 @@ function renderToday() {
   return `
     <section class="runner-layout">
       ${todayMainCard(context)}
+      <button class="button secondary extra-run-button" data-action="open-extra-register" type="button">
+        <i data-lucide="plus"></i>
+        <span>Adicionar corrida extra</span>
+      </button>
       <div class="today-support">
         ${upcomingWeekList(week)}
         ${weekProgressCard(completed)}
@@ -898,17 +938,82 @@ function renderSettings() {
           <span>Salvar configuracoes</span>
         </button>
       </form>
+      ${currentUser?.role === 'coach' ? coachWorkoutCard() : ''}
     </section>
+  `;
+}
+
+function coachWorkoutCard() {
+  return `
+    <form class="settings-card coach-card" id="coachWorkoutForm">
+      <div>
+        <p class="eyebrow">Coach</p>
+        <h2>Construir treino para atleta</h2>
+      </div>
+      <label>
+        Atleta
+        <input name="athlete" type="text" placeholder="username ou email" autocomplete="off" required />
+      </label>
+      <div class="form-grid">
+        <label>
+          Data
+          <input name="date" type="date" value="${escapeAttr(toIsoDate(new Date()))}" required />
+        </label>
+        <label>
+          Tipo
+          <input name="type" type="text" placeholder="Corrida longa, intervalado..." value="Corrida personalizada" required />
+        </label>
+      </div>
+      <div class="form-grid">
+        <label>
+          Distancia
+          <div class="unit-input">
+            <input name="distanceKm" type="text" inputmode="decimal" placeholder="8,0" required />
+            <b>km</b>
+          </div>
+        </label>
+        <label>
+          Pace alvo
+          <input name="paceTarget" type="text" placeholder="6:15-6:45/km" />
+        </label>
+      </div>
+      <label>
+        Objetivo
+        <textarea name="notes" rows="3" placeholder="Descreva o treino que o atleta deve executar." required></textarea>
+      </label>
+      <label>
+        Orientacao
+        <textarea name="guidance" rows="2" placeholder="Ajustes por RPE, observacoes e alternativas."></textarea>
+      </label>
+      <button class="button primary" type="submit">
+        <i data-lucide="plus"></i>
+        <span>Adicionar ao plano do atleta</span>
+      </button>
+    </form>
   `;
 }
 
 function openRegistrationModal(weekIndex, workoutIndex, forceEdit) {
   const workout = state.weeks[weekIndex]?.workouts[workoutIndex];
   if (!workout || Number(workout.distanceKm || 0) === 0) return;
-  modalContext = { weekIndex, workoutIndex };
+  modalContext = { kind: 'planned', weekIndex, workoutIndex };
   modalContent.innerHTML = isWorkoutRecorded(workout) && !forceEdit
     ? registrationSummary(workout, weekIndex, workoutIndex)
-    : registrationForm(workout);
+    : registrationForm(workout, { isExtra: false });
+  showRegistrationModal();
+}
+
+function openExtraRegistrationModal(extraIndex = null) {
+  const workout = Number.isInteger(extraIndex)
+    ? state.extraWorkouts?.[extraIndex]
+    : defaultExtraWorkout();
+  if (!workout) return;
+  modalContext = { kind: 'extra', extraIndex: Number.isInteger(extraIndex) ? extraIndex : null };
+  modalContent.innerHTML = registrationForm(workout, { isExtra: true });
+  showRegistrationModal();
+}
+
+function showRegistrationModal() {
   registrationModal.hidden = false;
   document.body.classList.add('modal-open');
   modalContent.scrollTop = 0;
@@ -922,17 +1027,34 @@ function closeRegistrationModal() {
   modalContent.innerHTML = '';
 }
 
-function registrationForm(workout) {
+function registrationForm(workout, options = {}) {
+  const isExtra = Boolean(options.isExtra);
   const execution = normalizeExecution(workout.execution ?? {}, workout.status);
   const hasComment = Boolean(execution.comentario);
   const status = execution.status && execution.status !== 'pendente' ? execution.status : 'finalizado';
   const trainingFieldsHidden = status === 'perdido' ? 'hidden' : '';
   const replacementHidden = status === 'substituido' ? '' : 'hidden';
+  const distanceValue = execution.km_real ?? (isExtra ? '' : workout.distanceKm);
 
   return `
     <form id="quickRegisterForm" class="quick-register" novalidate>
-      <h2 id="modalTitle">Registrar treino</h2>
+      <h2 id="modalTitle">${isExtra ? 'Corrida extra' : 'Registrar treino'}</h2>
       <p class="modal-subtitle">${dayFullDate(workout.date)} · ${escapeHtml(workout.type)}</p>
+
+      ${isExtra ? `
+        <div class="form-grid">
+          <label>
+            Data
+            <input name="extraDate" type="date" value="${escapeAttr(workout.date)}" required />
+            <span class="field-error" id="extraDateError" hidden>Informe a data da corrida.</span>
+          </label>
+          <label>
+            Nome
+            <input name="extraType" type="text" value="${escapeAttr(workout.type)}" placeholder="Corrida extra" required />
+            <span class="field-error" id="extraTypeError" hidden>Informe um nome para a corrida.</span>
+          </label>
+        </div>
+      ` : ''}
 
       <label>
         Status do treino
@@ -941,11 +1063,12 @@ function registrationForm(workout) {
         </select>
       </label>
 
-      <div class="training-fields" id="trainingFields" ${trainingFieldsHidden}>
+      <fieldset class="training-fields" id="trainingFields" ${trainingFieldsHidden}>
+        <legend>Dados da corrida feita</legend>
         <label>
           Distancia real
           <div class="unit-input">
-            <input name="distance" type="text" inputmode="decimal" autocomplete="off" value="${escapeAttr(formatDistanceInput(execution.km_real ?? workout.distanceKm))}" />
+            <input name="distance" type="text" inputmode="decimal" autocomplete="off" value="${escapeAttr(formatDistanceInput(distanceValue))}" aria-describedby="distanceError" required />
             <b>km</b>
           </div>
           <span class="field-error" id="distanceError" hidden>Informe uma distancia maior que zero.</span>
@@ -953,17 +1076,17 @@ function registrationForm(workout) {
 
         <label>
           Tempo total
-          <input name="duration" type="text" inputmode="numeric" placeholder="42:30 ou 1:42:30" value="${escapeAttr(execution.tempo_real ?? '')}" />
+          <input name="duration" type="text" inputmode="numeric" placeholder="42:30 ou 1:42:30" value="${escapeAttr(execution.tempo_real ?? '')}" aria-describedby="durationError" required />
           <span class="field-error" id="durationError" hidden>Digite o tempo em mm:ss ou h:mm:ss.</span>
         </label>
 
         <label>
           Pace medio
-          <input name="pace" type="text" inputmode="numeric" placeholder="${escapeAttr(firstPace(workout.paceTarget) ?? '5:41')}" value="${escapeAttr(execution.pace_real ?? '')}" />
-          <span class="field-hint" id="paceHint">Calculado automaticamente pela distancia e tempo.</span>
+          <input name="pace" type="text" inputmode="numeric" placeholder="${escapeAttr(firstPace(workout.paceTarget) ?? '5:41')}" value="${escapeAttr(execution.pace_real ?? '')}" aria-describedby="paceHint paceError" required />
+          <span class="field-hint" id="paceHint" aria-live="polite">Calculado automaticamente pela distancia e tempo.</span>
           <span class="field-error" id="paceError" hidden>Digite no formato mm:ss.</span>
         </label>
-      </div>
+      </fieldset>
 
       <label class="rpe-field">
         <span>Como foi o esforco?</span>
@@ -1010,7 +1133,7 @@ function registrationForm(workout) {
       </label>
 
       <button class="button confirm" type="submit">
-        <span>Salvar treino ✓</span>
+        <span>${isExtra ? 'Salvar corrida extra ✓' : 'Salvar treino ✓'}</span>
       </button>
     </form>
   `;
@@ -1034,9 +1157,15 @@ function registrationSummary(workout, weekIndex, workoutIndex) {
 
 function confirmRegistration(form) {
   if (!modalContext) return;
-  const workout = state.weeks[modalContext.weekIndex].workouts[modalContext.workoutIndex];
+  const isExtra = modalContext.kind === 'extra';
+  const workout = isExtra
+    ? (Number.isInteger(modalContext.extraIndex) ? state.extraWorkouts?.[modalContext.extraIndex] : defaultExtraWorkout())
+    : state.weeks[modalContext.weekIndex].workouts[modalContext.workoutIndex];
+  if (!workout) return;
   const data = new FormData(form);
   const status = String(data.get('executionStatus') ?? 'finalizado');
+  const extraDate = String(data.get('extraDate') ?? workout.date).trim();
+  const extraType = String(data.get('extraType') ?? workout.type).trim();
   const distance = parseDistanceInput(data.get('distance'));
   const duration = normalizeDurationInput(String(data.get('duration') ?? ''));
   const pace = normalizePaceInput(String(data.get('pace') ?? ''));
@@ -1055,47 +1184,86 @@ function confirmRegistration(form) {
   const durationError = form.querySelector('#durationError');
   const replacementField = form.querySelector('[name="replacement"]');
   const replacementError = form.querySelector('#replacementError');
+  const extraDateField = form.querySelector('[name="extraDate"]');
+  const extraDateError = form.querySelector('#extraDateError');
+  const extraTypeField = form.querySelector('[name="extraType"]');
+  const extraTypeError = form.querySelector('#extraTypeError');
+  const validExtraDate = !isExtra || Boolean(parseLocalDate(extraDate));
+  const validExtraType = !isExtra || extraType.length >= 3;
   const validDistance = !requiresTrainingData || (Number.isFinite(distance) && distance > 0);
   const validDuration = !requiresTrainingData || isValidDuration(duration);
   const validPace = !requiresTrainingData || isValidPace(pace);
   const validReplacement = status !== 'substituido' || replacement.length >= 3;
 
+  extraDateField?.classList.toggle('is-invalid', !validExtraDate);
+  extraTypeField?.classList.toggle('is-invalid', !validExtraType);
   distanceField?.classList.toggle('is-invalid', !validDistance);
   durationField?.classList.toggle('is-invalid', !validDuration);
   paceField?.classList.toggle('is-invalid', !validPace);
   replacementField?.classList.toggle('is-invalid', !validReplacement);
+  extraDateField?.toggleAttribute('aria-invalid', !validExtraDate);
+  extraTypeField?.toggleAttribute('aria-invalid', !validExtraType);
   distanceField?.toggleAttribute('aria-invalid', !validDistance);
   durationField?.toggleAttribute('aria-invalid', !validDuration);
   paceField?.toggleAttribute('aria-invalid', !validPace);
   replacementField?.toggleAttribute('aria-invalid', !validReplacement);
+  if (extraDateError) extraDateError.hidden = validExtraDate;
+  if (extraTypeError) extraTypeError.hidden = validExtraType;
   if (distanceError) distanceError.hidden = validDistance;
   if (durationError) durationError.hidden = validDuration;
   if (paceError) paceError.hidden = validPace;
   if (replacementError) replacementError.hidden = validReplacement;
 
+  if (!validExtraDate) {
+    focusInvalidField(extraDateField);
+    return;
+  }
+
+  if (!validExtraType) {
+    focusInvalidField(extraTypeField);
+    return;
+  }
+
   if (!validDistance) {
-    distanceField?.focus();
+    focusInvalidField(distanceField);
     return;
   }
 
   if (!validDuration) {
-    durationField?.focus();
+    focusInvalidField(durationField);
     return;
   }
 
   if (!validPace) {
-    paceField?.focus();
+    focusInvalidField(paceField);
     return;
   }
 
   if (!validReplacement) {
-    replacementField?.focus();
+    focusInvalidField(replacementField);
     return;
   }
 
   const current = normalizeExecution(workout.execution ?? {}, workout.status);
-  const executionDate = current.data_execucao ?? toIsoDate(new Date());
+  const executionDate = isExtra ? extraDate : current.data_execucao ?? toIsoDate(new Date());
+  if (isExtra) {
+    workout.id ||= `extra-${Date.now()}`;
+    workout.date = extraDate;
+    workout.day = weekdayAbbrev(extraDate);
+    workout.type = extraType;
+    workout.week = weekForDate(extraDate)?.week ?? 0;
+    workout.order ||= (state.extraWorkouts?.length ?? 0) + 1;
+    workout.source = 'extra';
+    workout.notes = 'Corrida extra fora da preparacao.';
+    workout.guidance = 'Registro extra, sem impacto na aderencia do plano.';
+    workout.paceTarget = 'solto';
+  }
   workout.status = status;
+  workout.distanceKm = requiresTrainingData ? round(distance) : 0;
+  workout.distanceLabel = requiresTrainingData ? formatDistanceLabel(round(distance)) : '0 km';
+  workout.durationMinutes = requiresTrainingData ? Math.round((parseDurationToSeconds(duration) ?? 0) / 60) : 0;
+  workout.zone = workout.zone ?? 'Z2';
+  workout.effort = rpe;
   workout.execution = {
     done: status === 'finalizado',
     status,
@@ -1119,10 +1287,15 @@ function confirmRegistration(form) {
     executedAt: executionDate,
   };
 
+  if (isExtra && !Number.isInteger(modalContext.extraIndex)) {
+    state.extraWorkouts ??= [];
+    state.extraWorkouts.push(workout);
+  }
+
   persist({ silent: true });
   closeRegistrationModal();
   render();
-  showToast(status === 'perdido' ? 'Treino marcado como perdido' : 'Registro salvo ✓');
+  showToast(isExtra ? 'Corrida extra salva ✓' : status === 'perdido' ? 'Treino marcado como perdido' : 'Registro salvo ✓');
 }
 
 function todayContext() {
@@ -1148,8 +1321,23 @@ function latestMissedWorkout(date) {
 
 function allWorkoutRefs() {
   return state.weeks.flatMap((week, weekIndex) =>
-    week.workouts.map((workout, workoutIndex) => ({ week, weekIndex, workoutIndex, workout })),
+    week.workouts.map((workout, workoutIndex) => ({ source: 'planned', week, weekIndex, workoutIndex, workout })),
   );
+}
+
+function extraWorkoutRefs() {
+  return (state.extraWorkouts ?? []).map((workout, extraIndex) => ({
+    source: 'extra',
+    week: weekForDate(workout.date),
+    weekIndex: -1,
+    workoutIndex: -1,
+    extraIndex,
+    workout,
+  }));
+}
+
+function reportWorkoutRefs() {
+  return [...allWorkoutRefs(), ...extraWorkoutRefs()];
 }
 
 function upcomingWeekList(week) {
@@ -1387,12 +1575,15 @@ function historyCard(items) {
           <div class="history-row">
             <div>
               <strong>${dayShortDate(item.execution.data_execucao ?? item.date)} · ${escapeHtml(item.type)}</strong>
-              <span>${escapeHtml(statusLabel(item.status))} · Planejado ${escapeHtml(item.distanceLabel ?? `${item.distanceKm} km`)} · Real ${escapeHtml(item.execution.km_real ? `${item.execution.km_real} km` : '-')}</span>
+              <span>${escapeHtml(item.source === 'extra' ? 'Corrida extra' : statusLabel(item.status))} · Planejado ${escapeHtml(item.source === 'extra' ? 'fora do plano' : item.distanceLabel ?? `${item.distanceKm} km`)} · Real ${escapeHtml(item.execution.km_real ? `${item.execution.km_real} km` : '-')}</span>
               ${item.execution.desempenho ? `<p>${escapeHtml(item.execution.desempenho)}</p>` : ''}
             </div>
             <div>
               <b>${escapeHtml(item.execution.pace_real ? `${item.execution.pace_real}/km` : '-')}</b>
               <small>RPE ${escapeHtml(item.execution.rpe ?? '-')}</small>
+              ${item.source === 'extra'
+                ? `<button class="icon-button history-edit" data-action="edit-extra-register" data-extra="${item.extraIndex}" type="button" aria-label="Editar corrida extra ${escapeAttr(item.type)}"><i data-lucide="pencil"></i></button>`
+                : `<button class="icon-button history-edit" data-action="edit-register" data-week="${item.weekIndex}" data-workout="${item.workoutIndex}" type="button" aria-label="Editar treino ${escapeAttr(item.type)}"><i data-lucide="pencil"></i></button>`}
             </div>
           </div>
         `).join('')}
@@ -1442,9 +1633,9 @@ function statusBadge(status) {
   if (status.className === 'parcial') return '<span class="status-pill partial">Parcial</span>';
   if (status.className === 'substituido') return '<span class="status-pill replaced">Substituido</span>';
   if (status.className === 'perdido') return '<span class="status-pill lost">Perdido</span>';
-  if (status.className === 'today') return '<span class="status-pill today">Hoje</span>';
-  if (status.className === 'missed') return '<span class="status-pill missed">Nao registrado</span>';
-  return '<span class="status-pill">Futuro</span>';
+  if (status.className === 'today') return '<span class="status-pill today"><i data-lucide="list-checks"></i> Checklist</span>';
+  if (status.className === 'missed') return '<span class="status-pill missed"><i data-lucide="list-checks"></i> Checklist</span>';
+  return '<span class="status-pill"><i data-lucide="list-checks"></i> Checklist</span>';
 }
 
 function workoutVisualStatus(workout) {
@@ -1496,8 +1687,16 @@ function completedWorkouts() {
 }
 
 function finishedWorkouts() {
-  const items = state.weeks
-    .flatMap((week) => week.workouts.map((workout) => ({ ...workout, weekNumber: week.week, execution: normalizeExecution(workout.execution ?? {}, workout.status) })))
+  const items = reportWorkoutRefs()
+    .map((item) => ({
+      ...item.workout,
+      source: item.source,
+      weekIndex: item.weekIndex,
+      workoutIndex: item.workoutIndex,
+      extraIndex: item.extraIndex,
+      weekNumber: item.week?.week ?? item.workout.week ?? 0,
+      execution: normalizeExecution(item.workout.execution ?? {}, item.workout.status),
+    }))
     .filter((workout) =>
       isWorkoutRecorded(workout)
       && workout.status !== 'perdido'
@@ -1512,8 +1711,16 @@ function finishedWorkouts() {
 }
 
 function recordedWorkouts() {
-  return state.weeks
-    .flatMap((week) => week.workouts.map((workout) => ({ ...workout, weekNumber: week.week, execution: normalizeExecution(workout.execution ?? {}, workout.status) })))
+  return reportWorkoutRefs()
+    .map((item) => ({
+      ...item.workout,
+      source: item.source,
+      weekIndex: item.weekIndex,
+      workoutIndex: item.workoutIndex,
+      extraIndex: item.extraIndex,
+      weekNumber: item.week?.week ?? item.workout.week ?? 0,
+      execution: normalizeExecution(item.workout.execution ?? {}, item.workout.status),
+    }))
     .filter((workout) => workout.distanceKm > 0 && isWorkoutRecorded(workout))
     .sort((a, b) => `${a.execution.data_execucao ?? a.date}`.localeCompare(`${b.execution.data_execucao ?? b.date}`));
 }
@@ -1557,19 +1764,20 @@ function weeklyStats(recorded) {
   return state.weeks.map((week) => {
     const runWorkouts = week.workouts.filter((workout) => workout.distanceKm > 0);
     const records = recorded.filter((workout) => workout.weekNumber === week.week);
-    const done = records.filter((workout) => workout.status === 'finalizado').length;
-    const partial = records.filter((workout) => workout.status === 'parcial' || workout.status === 'substituido').length;
-    const lost = records.filter((workout) => workout.status === 'perdido').length;
+    const plannedRecords = records.filter((workout) => workout.source !== 'extra');
+    const done = plannedRecords.filter((workout) => workout.status === 'finalizado').length;
+    const partial = plannedRecords.filter((workout) => workout.status === 'parcial' || workout.status === 'substituido').length;
+    const lost = plannedRecords.filter((workout) => workout.status === 'perdido').length;
     const volume = records.reduce((sum, workout) => sum + Number(workout.execution.km_real || 0), 0);
     const rpes = records.map((workout) => Number(workout.execution.rpe)).filter(validRpe);
     return {
       week: week.week,
       planned: runWorkouts.length,
-      recorded: records.length,
+      recorded: plannedRecords.length,
       done,
       partial,
       lost,
-      adherence: runWorkouts.length ? Math.round((records.length / runWorkouts.length) * 100) : 0,
+      adherence: runWorkouts.length ? Math.round((plannedRecords.length / runWorkouts.length) * 100) : 0,
       volume: round(volume),
       avgRpe: rpes.length ? round(rpes.reduce((sum, value) => sum + value, 0) / rpes.length) : 0,
     };
@@ -1621,6 +1829,7 @@ function formatDistanceLabel(distanceKm) {
 function normalizePlanState() {
   if (!state?.weeks) return;
   state.schemaVersion = PLAN_VERSION;
+  state.extraWorkouts ??= [];
   state.weeks.forEach((week, weekIndex) => {
     week.workouts.forEach((workout, workoutIndex) => {
       workout.week ??= week.week ?? weekIndex + 1;
@@ -1635,6 +1844,25 @@ function normalizePlanState() {
       workout.execution.status = workout.status;
     });
   });
+  state.extraWorkouts = state.extraWorkouts
+    .filter((workout) => workout?.date)
+    .map((workout, index) => {
+      const status = normalizeWorkoutStatus(workout.execution?.status ?? workout.status ?? 'finalizado');
+      const execution = normalizeExecution(workout.execution ?? {}, status);
+      const distance = Number(execution.km_real || workout.distanceKm || 0);
+      return {
+        ...defaultExtraWorkout(workout.date),
+        ...workout,
+        id: workout.id ?? `extra-${workout.date}-${index + 1}`,
+        source: 'extra',
+        order: workout.order ?? index + 1,
+        week: weekForDate(workout.date)?.week ?? workout.week ?? 0,
+        status,
+        distanceKm: distance,
+        distanceLabel: distance ? formatDistanceLabel(round(distance)) : workout.distanceLabel ?? '',
+        execution,
+      };
+    });
 }
 
 function normalizeExecution(execution, fallbackStatus = 'pendente') {
@@ -1739,6 +1967,7 @@ function normalizeDurationInput(value) {
 }
 
 function formatDistanceInput(value) {
+  if (value === '' || value === null || value === undefined) return '';
   const distance = Number(value);
   if (!Number.isFinite(distance)) return '';
   return String(distance).replace('.', ',');
@@ -1822,6 +2051,33 @@ function setPaceHint(form) {
   paceHint.textContent = manual
     ? 'Pace editado manualmente. Limpe o campo para recalcular.'
     : 'Calculado automaticamente pela distancia e tempo.';
+}
+
+function defaultExtraWorkout(date = toIsoDate(new Date())) {
+  return {
+    id: `extra-${Date.now()}`,
+    source: 'extra',
+    week: weekForDate(date)?.week ?? 0,
+    order: (state?.extraWorkouts?.length ?? 0) + 1,
+    date,
+    day: weekdayAbbrev(date),
+    type: 'Corrida extra',
+    status: 'finalizado',
+    distanceKm: 0,
+    distanceLabel: '',
+    paceTarget: 'solto',
+    zone: 'Z2',
+    durationMinutes: 0,
+    effort: 5,
+    notes: 'Corrida extra fora da preparacao.',
+    guidance: 'Registro extra, sem impacto na aderencia do plano.',
+    execution: normalizeExecution({ status: 'finalizado', data_execucao: date, rpe: 5 }, 'finalizado'),
+  };
+}
+
+function focusInvalidField(field) {
+  field?.focus();
+  field?.scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
 
 function parsePaceToSeconds(value) {
@@ -1916,6 +2172,45 @@ function saveRunnerSettings(formData) {
   saveSettings();
   showToast('Configuracoes salvas!');
   render();
+}
+
+async function saveCoachWorkout(form) {
+  const formData = new FormData(form);
+  const payload = {
+    athlete: String(formData.get('athlete') ?? '').trim(),
+    date: String(formData.get('date') ?? '').trim(),
+    type: String(formData.get('type') ?? '').trim(),
+    distanceKm: parseDistanceInput(formData.get('distanceKm')),
+    paceTarget: String(formData.get('paceTarget') ?? '').trim() || 'solto',
+    notes: String(formData.get('notes') ?? '').trim(),
+    guidance: String(formData.get('guidance') ?? '').trim(),
+  };
+
+  if (!payload.athlete || !payload.date || !payload.type || !Number.isFinite(payload.distanceKm) || payload.distanceKm <= 0 || !payload.notes) {
+    showToast('Preencha atleta, data, tipo, distancia e objetivo.', 'warn');
+    return;
+  }
+
+  const button = form.querySelector('button[type="submit"]');
+  button?.setAttribute('disabled', '');
+
+  try {
+    const response = await fetch('/api/coach/workouts', {
+      method: 'POST',
+      headers: { ...authHeaders(), 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.message ?? 'Nao foi possivel criar o treino.');
+    form.reset();
+    form.querySelector('[name="date"]').value = toIsoDate(new Date());
+    form.querySelector('[name="type"]').value = 'Corrida personalizada';
+    showToast(`Treino enviado para ${result.athlete?.username || result.athlete?.email || payload.athlete} ✓`);
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : 'Nao foi possivel criar o treino.', 'warn');
+  } finally {
+    button?.removeAttribute('disabled');
+  }
 }
 
 function persist(options = {}) {

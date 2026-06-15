@@ -19,16 +19,15 @@ coverage/
 scripts/
 
 # Private local documentation
+*.md
+!README.md
+!README.*.md
 DEPLOY_PRIVATE.md
 README_PRIVATE.md
 README.local.md
 
 # Private training/source notes
-periodizacao*.md
-periodização*.md
-treino.md
 Markdown*.md colado
-PREPARACAO_MEIA_MARATONA.md
 
 # Secrets and credentials
 *.pem

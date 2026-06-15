@@ -1743,6 +1743,40 @@ input.is-invalid {
     padding: 0 16px;
   }
 
+  .today-card {
+    gap: 14px;
+    border-radius: 12px;
+    padding: 18px;
+  }
+
+  .today-card h2 {
+    font-size: 22px;
+    line-height: 1.12;
+  }
+
+  .recommendation-card {
+    gap: 14px;
+    border-radius: 10px;
+    padding: 14px;
+  }
+
+  .recommendation-card h3 {
+    margin-bottom: 8px;
+  }
+
+  .execution-grid {
+    gap: 12px;
+  }
+
+  .recommendation-metric strong,
+  .mini-metric strong {
+    font-size: 16px;
+  }
+
+  .recommendation-metric .target-pace {
+    font-size: 18px;
+  }
+
   .today-support,
   .execution-grid,
   .preparation-summary,
@@ -1767,11 +1801,20 @@ input.is-invalid {
 
   .week-workout {
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px 12px;
+    align-items: start;
+    gap: 10px 12px;
+    padding: 14px;
   }
 
   .week-date {
+    display: flex;
     grid-column: 1 / -1;
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .week-main strong {
+    white-space: normal;
   }
 
   .week-main p {
@@ -1782,11 +1825,23 @@ input.is-invalid {
   }
 
   .workout-facts {
-    gap: 5px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
   }
 
   .workout-facts span {
+    display: inline-flex;
+    min-height: 28px;
+    align-items: center;
+    justify-content: center;
     font-size: 10px;
+    text-align: center;
+    white-space: normal;
+  }
+
+  .week-workout-meta {
+    display: none;
   }
 
   .preparation-week-header {
